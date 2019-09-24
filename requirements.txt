@@ -2,6 +2,5 @@ numpy
 ipywidgets
 nbinteract
 pandas
-sqlalchemy
 matplotlib
 seaborn
