@@ -1,5 +1,5 @@
 numpy
-ipywidgets
+ipywidgets==7.5.1
 nbinteract
 pandas
 matplotlib
