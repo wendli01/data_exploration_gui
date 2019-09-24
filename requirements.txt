@@ -4,5 +4,4 @@ nbinteract
 pandas
 sqlalchemy
 matplotlib
-getpass
 seaborn
