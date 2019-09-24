@@ -1,0 +1,8 @@
+numpy
+ipywidgets
+nbinteract
+pandas
+sqlalchemy
+matplotlib
+getpass
+seaborn
