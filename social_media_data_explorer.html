@@ -13255,6 +13255,7 @@ div#notebook {
     <div class="input_area">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="s1">&#39;HUMAN_public_social_media.csv&#39;</span><span class="p">)</span>
 <span class="n">df</span><span class="o">.</span><span class="n">set_index</span><span class="p">(</span><span class="s1">&#39;uniqueid&#39;</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">df</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">&#39;[]&#39;</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">)</span>
 </pre></div>
 
     </div>
@@ -13285,8 +13286,7 @@ div#notebook {
     <div class="input_area">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="k">def</span> <span class="nf">paginate_df</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">nb_items</span> <span class="o">=</span> <span class="mi">10</span><span class="p">):</span>
     <span class="k">def</span> <span class="nf">show_df</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">page</span><span class="p">):</span>
-        <span class="n">df</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="n">page</span><span class="o">*</span><span class="n">nb_items</span><span class="p">)</span><span class="o">.</span><span class="n">tail</span><span class="p">(</span><span class="n">nb_items</span><span class="p">)</span>
-        <span class="n">display</span><span class="p">(</span><span class="n">df</span><span class="p">)</span>
+        <span class="n">display</span><span class="p">(</span><span class="n">df</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="n">page</span><span class="o">*</span><span class="n">nb_items</span><span class="p">)</span><span class="o">.</span><span class="n">tail</span><span class="p">(</span><span class="n">nb_items</span><span class="p">))</span>
         
     <span class="k">def</span> <span class="nf">show_next</span><span class="p">(</span><span class="n">change</span><span class="p">):</span>
         <span class="n">pagination_slider</span><span class="o">.</span><span class="n">value</span> <span class="o">+=</span> <span class="n">change</span>
@@ -13313,58 +13313,6 @@ div#notebook {
 </pre></div>
 
     </div>
-</div>
-</div>
-
-  </div>
-
-  
-
-  <div class="
-      cell border-box-sizing code_cell rendered">
-    <div class="input">
-
-<div class="inner_cell">
-    <div class="input_area">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="n">paginate_df</span><span class="p">(</span><span class="n">df</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="mi">50</span><span class="p">))</span>
-</pre></div>
-
-    </div>
-</div>
-</div>
-
-<div class="output_wrapper">
-<div class="output">
-
-
-<div class="output_area">
-
-    
-
-
-
-  <div class="output_subarea output_widget_view ">
-    <button class="js-nbinteract-widget">
-      Loading widgets...
-    </button>
-  </div>
-
-</div>
-
-<div class="output_area">
-
-    
-
-
-
-  <div class="output_subarea output_widget_view ">
-    <button class="js-nbinteract-widget">
-      Loading widgets...
-    </button>
-  </div>
-
-</div>
-
 </div>
 </div>
 
@@ -13448,7 +13396,7 @@ div#notebook {
     
 <span class="k">def</span> <span class="nf">show_filtered_df</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">order_by</span> <span class="o">=</span> <span class="s1">&#39;uniqueid&#39;</span><span class="p">,</span> <span class="n">ascending</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span> <span class="n">nb_items</span> <span class="o">=</span> <span class="mi">10</span><span class="p">,</span> <span class="n">required</span> <span class="o">=</span> <span class="p">[],</span> <span class="n">search_column</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">search_term</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">):</span>
     <span class="n">df</span> <span class="o">=</span> <span class="n">filter_df</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">order_by</span><span class="o">=</span><span class="n">order_by</span><span class="p">,</span> <span class="n">ascending</span><span class="o">=</span><span class="n">ascending</span><span class="p">,</span> <span class="n">required</span><span class="o">=</span><span class="n">required</span><span class="p">,</span> <span class="n">search_column</span><span class="o">=</span><span class="n">search_column</span><span class="p">,</span> <span class="n">search_term</span><span class="o">=</span><span class="n">search_term</span><span class="p">)</span>
-    <span class="n">paginate_df</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">nb_items</span><span class="o">=</span><span class="n">nb_items</span><span class="p">)</span>
+    <span class="n">display</span><span class="p">(</span><span class="n">paginate_df</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">nb_items</span><span class="o">=</span><span class="n">nb_items</span><span class="p">))</span>
 </pre></div>
 
     </div>
@@ -13520,12 +13468,7 @@ div#notebook {
     <span class="n">interactive_table</span> <span class="o">=</span> <span class="n">interactive_output</span><span class="p">(</span><span class="n">show_filtered_df</span><span class="p">,</span> 
                                            <span class="nb">dict</span><span class="p">(</span><span class="n">df</span><span class="o">=</span><span class="n">fixed</span><span class="p">(</span><span class="n">df</span><span class="p">),</span> <span class="n">order_by</span> <span class="o">=</span> <span class="n">order_by</span><span class="p">,</span> <span class="n">nb_items</span> <span class="o">=</span> <span class="n">nb_items</span><span class="p">,</span> <span class="n">required</span> <span class="o">=</span> <span class="n">filter_selector</span><span class="p">,</span> 
                                                 <span class="n">ascending</span><span class="o">=</span><span class="n">ascending</span><span class="p">,</span> <span class="n">search_column</span><span class="o">=</span><span class="n">search_column</span><span class="p">,</span> <span class="n">search_term</span><span class="o">=</span><span class="n">search_term</span><span class="p">))</span>
-    
-    <span class="n">grid</span> <span class="o">=</span> <span class="n">widgets</span><span class="o">.</span><span class="n">GridspecLayout</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span><span class="mi">1</span><span class="p">)</span>
-    <span class="n">grid</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">accordion</span>
-    <span class="n">grid</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">interactive_table</span>
-    <span class="k">return</span> <span class="n">grid</span>
-    <span class="c1">#display(widgets.(top_left=accordion, bottom_left=interactive_table))</span>
+    <span class="n">display</span><span class="p">(</span><span class="n">widgets</span><span class="o">.</span><span class="n">VBox</span><span class="p">([</span><span class="n">accordion</span><span class="p">,</span> <span class="n">interactive_table</span><span class="p">]))</span>
 </pre></div>
 
     </div>
