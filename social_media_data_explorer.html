@@ -13186,7 +13186,6 @@ div#notebook {
 <span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
 <span class="kn">import</span> <span class="nn">ipywidgets</span> <span class="k">as</span> <span class="nn">widgets</span>
 <span class="kn">from</span> <span class="nn">ipywidgets</span> <span class="k">import</span> <span class="n">interact</span><span class="p">,</span> <span class="n">interactive</span><span class="p">,</span> <span class="n">fixed</span><span class="p">,</span> <span class="n">interact_manual</span><span class="p">,</span> <span class="n">Layout</span><span class="p">,</span> <span class="n">interactive_output</span>
-<span class="kn">from</span> <span class="nn">sqlalchemy</span> <span class="k">import</span> <span class="n">create_engine</span>
 <span class="kn">from</span> <span class="nn">IPython.display</span> <span class="k">import</span> <span class="n">display</span><span class="p">,</span> <span class="n">HTML</span>
 <span class="kn">from</span> <span class="nn">getpass</span> <span class="k">import</span> <span class="n">getpass</span>
 <span class="kn">from</span> <span class="nn">matplotlib</span> <span class="k">import</span> <span class="n">pyplot</span> <span class="k">as</span> <span class="n">plt</span>
@@ -13308,7 +13307,7 @@ div#notebook {
 
         <span class="n">pagination_controls</span> <span class="o">=</span> <span class="n">widgets</span><span class="o">.</span><span class="n">HBox</span><span class="p">([</span><span class="n">pagination_slider</span><span class="p">,</span> <span class="n">pagination_slider_label</span><span class="p">,</span> <span class="n">nb_rows</span><span class="p">,</span> <span class="o">*</span><span class="n">get_pagination_buttons</span><span class="p">()])</span>
         <span class="n">paginated_table</span> <span class="o">=</span> <span class="n">interactive_output</span><span class="p">(</span><span class="n">show_df</span><span class="p">,</span> <span class="nb">dict</span><span class="p">(</span><span class="n">df</span><span class="o">=</span><span class="n">fixed</span><span class="p">(</span><span class="n">df</span><span class="p">),</span> <span class="n">page</span> <span class="o">=</span> <span class="n">pagination_slider</span><span class="p">))</span>
-        <span class="n">display</span><span class="p">(</span><span class="n">widgets</span><span class="o">.</span><span class="n">VBox</span><span class="p">([</span><span class="n">pagination_controls</span><span class="p">,</span> <span class="n">paginated_table</span><span class="p">]))</span>
+        <span class="n">display</span><span class="p">(</span><span class="n">pagination_controls</span><span class="p">,</span> <span class="n">paginated_table</span><span class="p">)</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="n">display</span><span class="p">(</span><span class="n">nb_rows</span><span class="p">,</span> <span class="n">df</span><span class="p">)</span>
 </pre></div>
@@ -13337,6 +13336,20 @@ div#notebook {
 <div class="output_wrapper">
 <div class="output">
 
+
+<div class="output_area">
+
+    
+
+
+
+  <div class="output_subarea output_widget_view ">
+    <button class="js-nbinteract-widget">
+      Loading widgets...
+    </button>
+  </div>
+
+</div>
 
 <div class="output_area">
 
