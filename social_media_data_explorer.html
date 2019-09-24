@@ -13212,6 +13212,43 @@ div#notebook {
 
 <div class="inner_cell">
     <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="kn">import</span> <span class="nn">widgetsnbextension</span>
+<span class="n">widgetsnbextension</span><span class="o">.</span><span class="n">__version__</span>
+</pre></div>
+
+    </div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+
+    
+
+
+
+<div class="output_text output_subarea output_execute_result">
+<pre>&#39;3.5.0&#39;</pre>
+</div>
+
+</div>
+
+</div>
+</div>
+
+  </div>
+
+  
+
+  <div class="
+      cell border-box-sizing code_cell rendered">
+    <div class="input">
+
+<div class="inner_cell">
+    <div class="input_area">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">display</span><span class="p">(</span><span class="n">HTML</span><span class="p">(</span><span class="s2">&quot;&lt;style&gt;.container { width:80% !important; }&lt;/style&gt;&quot;</span><span class="p">))</span>
 <span class="n">pd</span><span class="o">.</span><span class="n">set_option</span><span class="p">(</span><span class="s1">&#39;display.max_colwidth&#39;</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
 </pre></div>
@@ -13469,9 +13506,7 @@ div#notebook {
     <span class="n">interactive_table</span> <span class="o">=</span> <span class="n">interactive_output</span><span class="p">(</span><span class="n">show_filtered_df</span><span class="p">,</span> 
                                            <span class="nb">dict</span><span class="p">(</span><span class="n">df</span><span class="o">=</span><span class="n">fixed</span><span class="p">(</span><span class="n">df</span><span class="p">),</span> <span class="n">order_by</span> <span class="o">=</span> <span class="n">order_by</span><span class="p">,</span> <span class="n">nb_items</span> <span class="o">=</span> <span class="n">nb_items</span><span class="p">,</span> <span class="n">required</span> <span class="o">=</span> <span class="n">filter_selector</span><span class="p">,</span> 
                                                 <span class="n">ascending</span><span class="o">=</span><span class="n">ascending</span><span class="p">,</span> <span class="n">search_column</span><span class="o">=</span><span class="n">search_column</span><span class="p">,</span> <span class="n">search_term</span><span class="o">=</span><span class="n">search_term</span><span class="p">))</span>
-    <span class="k">return</span> <span class="n">widgets</span><span class="o">.</span><span class="n">VBox</span><span class="p">([</span><span class="n">accordion</span><span class="p">,</span> <span class="n">interactive_table</span><span class="p">])</span>
-
-<span class="n">table_app</span><span class="p">(</span><span class="n">df</span><span class="p">);</span>
+    <span class="n">display</span><span class="p">(</span><span class="n">accordion</span><span class="p">,</span> <span class="n">interactive_table</span><span class="p">)</span>
 </pre></div>
 
     </div>
@@ -13504,6 +13539,20 @@ div#notebook {
 <div class="output_wrapper">
 <div class="output">
 
+
+<div class="output_area">
+
+    
+
+
+
+  <div class="output_subarea output_widget_view ">
+    <button class="js-nbinteract-widget">
+      Loading widgets...
+    </button>
+  </div>
+
+</div>
 
 <div class="output_area">
 
