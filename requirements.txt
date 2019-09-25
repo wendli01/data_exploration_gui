@@ -4,3 +4,4 @@ nbinteract
 pandas
 matplotlib
 seaborn
+geopandas
