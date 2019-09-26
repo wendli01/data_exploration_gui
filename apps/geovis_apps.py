@@ -79,12 +79,12 @@ def merge_df(data, nuts_shapes, nuts_ids_column, color_column, level='all'):
 
     def aggregate_nuts_level(df, level, nuts_ids_column='NUTS_ID', aggregatable_columns=('num_persons',),
                              aggregation=np.sum):
-        df = df.copy()
+        df = df.dropna(subset=aggregatable_columns)
         df[nuts_ids_column] = df[nuts_ids_column].str.slice(0, level + 2)
         agg_df = aggregation(df.groupby(nuts_ids_column)[aggregatable_columns]).reset_index()
         return agg_df[agg_df[nuts_ids_column].apply(len) == level + 2]
 
-    agg_data = data.groupby(nuts_ids_column).sum().reset_index()
+    agg_data = data.dropna(subset=[color_column]).groupby(nuts_ids_column).sum().reset_index()
     if level != 'all':
         agg_data = aggregate_nuts_level(agg_data, level=level, aggregatable_columns=[color_column],
                                         nuts_ids_column=nuts_ids_column)
@@ -117,7 +117,7 @@ def plot_geo_data_shapes(data, nuts_shapes, date_range, nuts_ids_columns=('origi
         return data[(date_range[0] <= dates) & (dates <= date_range[1])]
 
     data = date_filter(data, date_range)
-    m = ipyleaflet.Map(center=(51, 10), zoom=4)
+    m = ipyleaflet.Map(center=(51, 10), zoom=4, scroll_wheel_zoom=True)
     m.layout.height = '800px'
     for nuts_ids_column in nuts_ids_columns:
         layer = get_geo_data(data, nuts_ids_column, m)
@@ -178,7 +178,7 @@ def plot_geo_data_cluster(data, geom_column, timestamp_column, date_range, title
         return data[(date_range[0] <= dates) & (dates <= date_range[1])]
 
     data = date_filter(data, date_range)
-    m = ipyleaflet.Map(center=(51, 10), zoom=4)
+    m = ipyleaflet.Map(center=(51, 10), zoom=4, scroll_wheel_zoom=True)
     m.layout.height = '800px'
     m.add_layer(get_marker_cluster(data, geom_column, title_columns=title_columns))
     m.add_control(ipyleaflet.FullScreenControl())
