@@ -131,8 +131,8 @@ def geo_vis_shapes_app(data):
     def get_cbar(name, logarithmic):
         color_vals = []
         for nuts_ids_column in nuts_ids_columns:
-            color_vals.append(merge_df(data, nuts_shapes, 'origin', color_column)[color_column])
-        vmin, vmax = max(np.min(color_vals), 1), np.max(color_vals)
+            color_vals.append(merge_df(data, nuts_shapes, nuts_ids_column, color_column)[color_column].values)
+        vmin, vmax = max(np.min(np.concatenate(color_vals)), 1), np.max(np.concatenate(color_vals))
         plot_cbar(name, vmin, vmax, logarithmic=logarithmic)
 
     nuts_ids_columns = ['origin', 'destination']
