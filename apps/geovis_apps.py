@@ -37,7 +37,8 @@ def get_nuts_shapes(shp_folder='nuts_data', simplify=False, tol=1e-3):
 
 
 def get_shapes_heatmap(data, nuts_ids_column, color_column, logarithmic: bool = False, cmap='viridis',
-                       info_columns=('NUTS_ID', 'NUTS_NAME', 'num_persons'), info_widget_html=None):
+                       info_columns=('NUTS_ID', 'NUTS_NAME', 'num_persons'), info_widget_html=None,
+                       vmin=0, vmax=1):
     def get_layer(shapes: gpd.GeoDataFrame, color):
         def get_info_text():
             return '<h4>{}</h4>'.format(nuts_ids_column) + '<br>'.join(
@@ -62,7 +63,7 @@ def get_shapes_heatmap(data, nuts_ids_column, color_column, logarithmic: bool = 
     def get_colors(values: pd.Series, logarithmic: bool = False, cmap='viridis'):
         values: pd.Series = values + 1e-5
         norm_class = matplotlib.colors.LogNorm if logarithmic else matplotlib.colors.Normalize
-        norm = norm_class(vmin=values.min(), vmax=values.max())
+        norm = norm_class(vmin=vmin, vmax=vmax)
         cm = matplotlib.cm.get_cmap(cmap)
         return values.apply(norm).apply(cm).apply(matplotlib.colors.to_hex)
 
@@ -92,8 +93,8 @@ def merge_df(data, nuts_shapes, nuts_ids_column, color_column, level='all'):
     return merged_df.dropna(subset=['NUTS_ID', color_column])
 
 
-def plot_cbar(name, vmin=0, vmax=1, logarithmic=False, n=100):
-    fig, ax = plt.subplots(figsize=(.3, 14))
+def plot_cbar(name, vmin=0, vmax=1, logarithmic=False):
+    fig, ax = plt.subplots(figsize=(.3, 10))
     norm = matplotlib.colors.LogNorm(vmin, vmax) if logarithmic else matplotlib.colors.Normalize(vmin, vmax)
     cbar = matplotlib.colorbar.ColorbarBase(ax, cmap=plt.get_cmap(name), norm=norm, orientation='vertical')
     return cbar
@@ -102,18 +103,18 @@ def plot_cbar(name, vmin=0, vmax=1, logarithmic=False, n=100):
 def plot_geo_data_shapes(data, nuts_shapes, date_range, nuts_ids_columns=('origin', 'destination'),
                          color_column='num_persons', logarithmic=False, cmap='viridis', timestamp_column='_timestamp',
                          level='all'):
-    def get_geo_data(data, nuts_ids_column, m):
+    def get_geo_data(data, nuts_ids_column, vmin, vmax):
         merged_df = merge_df(data=data, nuts_shapes=nuts_shapes, nuts_ids_column=nuts_ids_column,
-                             color_column=color_column,
-                             level=level)
+                             color_column=color_column, level=level)
         return get_shapes_heatmap(merged_df, nuts_ids_column=nuts_ids_column, color_column=color_column,
-                                  logarithmic=logarithmic, cmap=cmap, info_widget_html=country_widget_html)
+                                  logarithmic=logarithmic, cmap=cmap, info_widget_html=country_widget_html, vmin=vmin,
+                                  vmax=vmax)
 
     def date_filter(data, date_range):
         dates = pd.to_datetime(data[timestamp_column]).apply(pd.Timestamp.date)
         return data[(date_range[0] <= dates) & (dates <= date_range[1])]
 
-    data = date_filter(data, date_range)
+    data = date_filter(data, date_range).dropna(subset=nuts_ids_columns, how='all')
     m = ipyleaflet.Map(center=(51, 10), zoom=4, scroll_wheel_zoom=True)
     m.layout.height = '800px'
 
@@ -122,8 +123,14 @@ def plot_geo_data_shapes(data, nuts_shapes, date_range, nuts_ids_columns=('origi
     country_widget = ipyleaflet.WidgetControl(widget=country_widget_html, position='topright')
     m.add_control(country_widget)
 
+    vmin, vmax = max(1, data[color_column].min()), data[color_column].max()
+    cbar_widget_box = interactive_output(plot_cbar, dict(name=fixed(cmap), vmin=fixed(vmin), vmax=fixed(vmax),
+                                                         logarithmic=fixed(logarithmic)))
+    cbar_widget = ipyleaflet.WidgetControl(widget=cbar_widget_box, position='bottomright')
+    m.add_control(cbar_widget)
+
     for nuts_ids_column in nuts_ids_columns:
-        layer = get_geo_data(data, nuts_ids_column, m)
+        layer = get_geo_data(data, nuts_ids_column, vmin, vmax)
         m.add_layer(layer)
     m.add_control(ipyleaflet.LayersControl())
     m.add_control(ipyleaflet.FullScreenControl())
@@ -132,16 +139,8 @@ def plot_geo_data_shapes(data, nuts_shapes, date_range, nuts_ids_columns=('origi
 
 
 def geo_vis_shapes_app(data):
-    def get_cbar(name, logarithmic):
-        color_vals = []
-        for nuts_ids_column in nuts_ids_columns:
-            color_vals.append(merge_df(data, nuts_shapes, nuts_ids_column, color_column)[color_column].values)
-        vmin, vmax = max(np.min(np.concatenate(color_vals)), 1), np.max(np.concatenate(color_vals))
-        plot_cbar(name, vmin, vmax, logarithmic=logarithmic)
-
     nuts_ids_columns = ['origin', 'destination']
-    color_column = 'num_persons'
-    nuts_shapes = get_nuts_shapes(simplify=False, tol=1e-3)
+    nuts_shapes = get_nuts_shapes(simplify=True, tol=1e-3)
     avail_levels = sorted(nuts_shapes['LEVL_CODE'].unique())
 
     level = widgets.Dropdown(options=['all', *avail_levels], description='NUTS levels')
@@ -149,16 +148,13 @@ def geo_vis_shapes_app(data):
     logarithmic = widgets.Checkbox(description='logarithmic')
     time_slider = get_time_slider(data)
     controls = widgets.VBox([widgets.HBox([level, cmap, logarithmic]), time_slider])
-    cbar = interactive_output(get_cbar, dict(name=cmap, logarithmic=logarithmic))
 
     geo_vis = interactive_output(plot_geo_data_shapes,
                                  dict(nuts_shapes=fixed(nuts_shapes), data=fixed(data), logarithmic=logarithmic,
                                       cmap=cmap, nuts_ids_columns=fixed(nuts_ids_columns), level=level,
                                       date_range=time_slider))
 
-    geo_vis.layout.width = '90%'
-    geo_vis_box = widgets.HBox([geo_vis, cbar])
-    display(controls, geo_vis_box)
+    display(controls, geo_vis)
 
 
 def get_marker_cluster(data, geom_column, title_columns=('text_translated', '_timestamp')):
