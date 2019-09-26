@@ -64,7 +64,7 @@ def get_shapes_heatmap(data, nuts_ids_column, color_column, logarithmic: bool = 
                 tweets_box.placeholder = nuts_id
 
         nuts_id = shapes[nuts_ids_column].values[0]
-        relevant_data = full_data[full_data[nuts_ids_column] == nuts_id].reset_index()
+        relevant_data = full_data[full_data[nuts_ids_column].str.startswith(nuts_id, na=False)].reset_index()
         style = {'color': color, 'fillColor': color, 'opacity': 0.5, 'weight': 1.9, 'dashArray': '2',
                  'fillOpacity': 0.2}
         hover_style = {'fillColor': 'blue', 'fillOpacity': 0.2}
@@ -77,7 +77,9 @@ def get_shapes_heatmap(data, nuts_ids_column, color_column, logarithmic: bool = 
 
     def get_layer_group(shapes: gpd.GeoDataFrame, colors, group_name='', sorting_column='LEVL_CODE'):
         if sorting_column in shapes:
-            shapes = shapes.sort_values(sorting_column)
+            sorting = shapes[sorting_column].argsort()
+            shapes = shapes.iloc[sorting]
+            colors = colors.iloc[sorting]
         layers = [get_layer(shapes.iloc[[i]], color=color) for i, color in enumerate(colors)]
         return ipyleaflet.LayerGroup(layers=layers, name=group_name)
 
@@ -139,17 +141,9 @@ def plot_time_hist(data, timestamp_column, value_column, xlims):
     return plot
 
 
-def plot_geo_data_shapes(data, nuts_shapes, date_range, nuts_ids_columns=('origin', 'destination'),
-                         color_column='num_persons', logarithmic=False, cmap='viridis', timestamp_column='_timestamp',
-                         level='all'):
-    def get_geo_data(data, nuts_ids_column, vmin, vmax):
-        merged_df = merge_df(data=data, nuts_shapes=nuts_shapes, nuts_ids_column=nuts_ids_column,
-                             color_column=color_column, level=level)
-        return get_shapes_heatmap(merged_df, nuts_ids_column=nuts_ids_column, color_column=color_column,
-                                  logarithmic=logarithmic, cmap=cmap, info_widget_html=country_widget_html, vmin=vmin,
-                                  vmax=vmax, full_data=full_data, time_hist=time_hist, date_limits=date_range,
-                                  tweets_box=tweets_table)
-
+def plot_geo_shapes_vis(data, nuts_shapes, date_range, nuts_ids_columns=('origin', 'destination'),
+                        color_column='num_persons', logarithmic=False, cmap='viridis', timestamp_column='_timestamp',
+                        level='all'):
     def date_filter(data, date_range):
         dates = pd.to_datetime(data[timestamp_column]).apply(pd.Timestamp.date)
         return data[(date_range[0] <= dates) & (dates <= date_range[1])]
@@ -159,12 +153,15 @@ def plot_geo_data_shapes(data, nuts_shapes, date_range, nuts_ids_columns=('origi
     m = ipyleaflet.Map(center=(51, 10), zoom=4, scroll_wheel_zoom=True)
     m.layout.height = '800px'
 
+    merged_dfs = [merge_df(data=data, nuts_shapes=nuts_shapes, nuts_ids_column=nuts_ids_column,
+                           color_column=color_column, level=level) for nuts_ids_column in nuts_ids_columns]
+    vmin, vmax = 1, np.max([df[color_column].max() for df in merged_dfs])
+
     country_widget_html = widgets.HTML('''Hover over a Region<br>Click it to see tweets''')
     country_widget_html.layout.margin = '0px 20px 20px 20px'
     country_widget = ipyleaflet.WidgetControl(widget=country_widget_html, position='topright')
     m.add_control(country_widget)
 
-    vmin, vmax = max(1, data[color_column].min()), data[color_column].max()
     cbar_widget_box = interactive_output(plot_cbar, dict(name=fixed(cmap), vmin=fixed(vmin), vmax=fixed(vmax),
                                                          logarithmic=fixed(logarithmic)))
     cbar_widget = ipyleaflet.WidgetControl(widget=cbar_widget_box, position='bottomright')
@@ -179,11 +176,15 @@ def plot_geo_data_shapes(data, nuts_shapes, date_range, nuts_ids_columns=('origi
     tweets_box_widget = ipyleaflet.WidgetControl(widget=tweets_box, position='bottomleft')
     m.add_control(tweets_box_widget)
 
-    for nuts_ids_column in nuts_ids_columns:
-        layer = get_geo_data(data, nuts_ids_column, vmin, vmax)
-        m.add_layer(layer)
     m.add_control(ipyleaflet.LayersControl())
     m.add_control(ipyleaflet.FullScreenControl())
+
+    for merged_df, nuts_ids_column in zip(merged_dfs, nuts_ids_columns):
+        layer = get_shapes_heatmap(data=merged_df, nuts_ids_column=nuts_ids_column, color_column=color_column,
+                                   logarithmic=logarithmic, cmap=cmap, info_widget_html=country_widget_html, vmin=vmin,
+                                   vmax=vmax, full_data=full_data, time_hist=time_hist, date_limits=date_range,
+                                   tweets_box=tweets_table)
+        m.add_layer(layer)
 
     display(m)
 
@@ -199,7 +200,7 @@ def geo_vis_shapes_app(data, simplify_nuts_shapes=True):
     time_slider = get_time_slider(data)
     controls = widgets.VBox([widgets.HBox([level, cmap, logarithmic]), time_slider])
 
-    geo_vis = interactive_output(plot_geo_data_shapes,
+    geo_vis = interactive_output(plot_geo_shapes_vis,
                                  dict(nuts_shapes=fixed(nuts_shapes), data=fixed(data), logarithmic=logarithmic,
                                       cmap=cmap, nuts_ids_columns=fixed(nuts_ids_columns), level=level,
                                       date_range=time_slider))
