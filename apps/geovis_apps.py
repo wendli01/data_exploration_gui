@@ -38,7 +38,7 @@ def get_nuts_shapes(shp_folder='nuts_data', simplify=False, tol=1e-3):
 
 def get_shapes_heatmap(data, nuts_ids_column, color_column, logarithmic: bool = False, cmap='viridis',
                        info_columns=('NUTS_ID', 'NUTS_NAME', 'num_persons'), info_widget_html=None,
-                       vmin=0, vmax=1):
+                       vmin=0, vmax=1, time_hist=None, full_data=None, date_limits=None):
     def get_layer(shapes: gpd.GeoDataFrame, color):
         def get_info_text():
             return '<h4>{}</h4>'.format(nuts_ids_column) + '<br>'.join(
@@ -46,6 +46,11 @@ def get_shapes_heatmap(data, nuts_ids_column, color_column, logarithmic: bool = 
 
         def hover_event_handler(**kwargs):
             info_widget_html.value = get_info_text()
+            nuts_id = shapes[nuts_ids_column].values[0]
+            out = interactive_output(plot_time_hist, dict(data=fixed(full_data[full_data[nuts_ids_column] == nuts_id]),
+                                                          timestamp_column=fixed('_timestamp'),
+                                                          value_column=fixed(color_column), xlims=fixed(date_limits)))
+            time_hist.children = [out]
 
         style = {'color': color, 'fillColor': color, 'opacity': 0.5, 'weight': 1.9, 'dashArray': '2',
                  'fillOpacity': 0.2}
@@ -100,6 +105,25 @@ def plot_cbar(name, vmin=0, vmax=1, logarithmic=False):
     return cbar
 
 
+def plot_time_hist(data, timestamp_column, value_column, xlims):
+    df = data.copy()
+    dates = pd.to_datetime(df[timestamp_column]).apply(pd.Timestamp.date)
+    time_hist = df.groupby(dates).sum()[value_column].reset_index()
+    time_hist['zero'] = 0
+    if len(time_hist) == 0:
+        return
+    plt.box(False)
+    plt.xlim(*xlims)
+    if len(time_hist) > 1:
+        plot = plt.plot(time_hist[timestamp_column], time_hist[value_column], label=value_column, marker='o')
+        plt.fill_between(time_hist[timestamp_column], time_hist[value_column], time_hist['zero'], alpha=.4)
+    else:
+        plot = plt.scatter(time_hist[timestamp_column], time_hist[value_column], label=value_column)
+        plt.ylim(0, 1.05 * time_hist[value_column].max())
+    plt.legend(), plt.xlabel(''), plt.xticks(rotation=45), plt.tight_layout()
+    return plot
+
+
 def plot_geo_data_shapes(data, nuts_shapes, date_range, nuts_ids_columns=('origin', 'destination'),
                          color_column='num_persons', logarithmic=False, cmap='viridis', timestamp_column='_timestamp',
                          level='all'):
@@ -108,17 +132,18 @@ def plot_geo_data_shapes(data, nuts_shapes, date_range, nuts_ids_columns=('origi
                              color_column=color_column, level=level)
         return get_shapes_heatmap(merged_df, nuts_ids_column=nuts_ids_column, color_column=color_column,
                                   logarithmic=logarithmic, cmap=cmap, info_widget_html=country_widget_html, vmin=vmin,
-                                  vmax=vmax)
+                                  vmax=vmax, full_data=full_data, time_hist=time_hist, date_limits=date_range)
 
     def date_filter(data, date_range):
         dates = pd.to_datetime(data[timestamp_column]).apply(pd.Timestamp.date)
         return data[(date_range[0] <= dates) & (dates <= date_range[1])]
 
     data = date_filter(data, date_range).dropna(subset=nuts_ids_columns, how='all')
+    full_data = data.copy()
     m = ipyleaflet.Map(center=(51, 10), zoom=4, scroll_wheel_zoom=True)
     m.layout.height = '800px'
 
-    country_widget_html = widgets.HTML('''Hover über eine Region''')
+    country_widget_html = widgets.HTML('''Hover over a Region''')
     country_widget_html.layout.margin = '0px 20px 20px 20px'
     country_widget = ipyleaflet.WidgetControl(widget=country_widget_html, position='topright')
     m.add_control(country_widget)
@@ -129,6 +154,11 @@ def plot_geo_data_shapes(data, nuts_shapes, date_range, nuts_ids_columns=('origi
     cbar_widget = ipyleaflet.WidgetControl(widget=cbar_widget_box, position='bottomright')
     m.add_control(cbar_widget)
 
+    time_hist = widgets.HBox()  # interactive_output(plot_time_hist, dict(data=fixed(full_data), timestamp_column=fixed('_timestamp'),
+    #   value_column=fixed(color_column)))
+    time_hist_widget = ipyleaflet.WidgetControl(widget=time_hist, position='bottomleft')
+    m.add_control(time_hist_widget)
+
     for nuts_ids_column in nuts_ids_columns:
         layer = get_geo_data(data, nuts_ids_column, vmin, vmax)
         m.add_layer(layer)
@@ -138,9 +168,9 @@ def plot_geo_data_shapes(data, nuts_shapes, date_range, nuts_ids_columns=('origi
     display(m)
 
 
-def geo_vis_shapes_app(data):
+def geo_vis_shapes_app(data, simplify_nuts_shapes=True):
     nuts_ids_columns = ['origin', 'destination']
-    nuts_shapes = get_nuts_shapes(simplify=True, tol=1e-3)
+    nuts_shapes = get_nuts_shapes(simplify=simplify_nuts_shapes, tol=1e-3)
     avail_levels = sorted(nuts_shapes['LEVL_CODE'].unique())
 
     level = widgets.Dropdown(options=['all', *avail_levels], description='NUTS levels')
