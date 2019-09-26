@@ -1,5 +1,4 @@
 import os
-
 import geopandas as gpd
 import ipyleaflet
 import ipywidgets as widgets
@@ -37,23 +36,21 @@ def get_nuts_shapes(shp_folder='nuts_data', simplify=False, tol=1e-3):
     return geo_df
 
 
-def get_shapes_heatmap(data, nuts_ids_column, color_column, m, logarithmic: bool = False, cmap='viridis',
-                       title_columns=('NUTS_NAME', 'num_persons')):
+def get_shapes_heatmap(data, nuts_ids_column, color_column, logarithmic: bool = False, cmap='viridis',
+                       info_columns=('NUTS_ID', 'NUTS_NAME', 'num_persons'), info_widget_html=None):
     def get_layer(shapes: gpd.GeoDataFrame, color):
-        def get_event_handler(location, text):
-            def layer_event_handler(event, **kwargs):
-                if event == 'click':
-                    m.add_layer(ipyleaflet.Popup(location=location, child=widgets.HTML(text)))
+        def get_info_text():
+            return '<h4>{}</h4>'.format(nuts_ids_column) + '<br>'.join(
+                [str(shapes[col].values[0]) for col in info_columns])
 
-            return layer_event_handler
+        def hover_event_handler(**kwargs):
+            info_widget_html.value = get_info_text()
 
         style = {'color': color, 'fillColor': color, 'opacity': 0.5, 'weight': 1.9, 'dashArray': '2',
                  'fillOpacity': 0.2}
         hover_style = {'fillColor': 'blue', 'fillOpacity': 0.2}
         layer = ipyleaflet.GeoData(geo_dataframe=shapes, style=style, hover_style=hover_style)
-        text = nuts_ids_column + '<br>' + '<br>'.join([str(shapes[k].values[0]) for k in title_columns])
-        location = np.mean([shapes.geometry.centroid.y.values, shapes.geometry.centroid.x.values], 1)
-        layer.on_click(get_event_handler(list(location), text))
+        layer.on_hover(hover_event_handler)
         return layer
 
     def get_layer_group(shapes: gpd.GeoDataFrame, colors, group_name='', sorting_column='LEVL_CODE'):
@@ -110,7 +107,7 @@ def plot_geo_data_shapes(data, nuts_shapes, date_range, nuts_ids_columns=('origi
                              color_column=color_column,
                              level=level)
         return get_shapes_heatmap(merged_df, nuts_ids_column=nuts_ids_column, color_column=color_column,
-                                  logarithmic=logarithmic, cmap=cmap, m=m)
+                                  logarithmic=logarithmic, cmap=cmap, info_widget_html=country_widget_html)
 
     def date_filter(data, date_range):
         dates = pd.to_datetime(data[timestamp_column]).apply(pd.Timestamp.date)
@@ -119,11 +116,18 @@ def plot_geo_data_shapes(data, nuts_shapes, date_range, nuts_ids_columns=('origi
     data = date_filter(data, date_range)
     m = ipyleaflet.Map(center=(51, 10), zoom=4, scroll_wheel_zoom=True)
     m.layout.height = '800px'
+
+    country_widget_html = widgets.HTML('''Hover über eine Region''')
+    country_widget_html.layout.margin = '0px 20px 20px 20px'
+    country_widget = ipyleaflet.WidgetControl(widget=country_widget_html, position='topright')
+    m.add_control(country_widget)
+
     for nuts_ids_column in nuts_ids_columns:
         layer = get_geo_data(data, nuts_ids_column, m)
         m.add_layer(layer)
     m.add_control(ipyleaflet.LayersControl())
     m.add_control(ipyleaflet.FullScreenControl())
+
     display(m)
 
 
@@ -137,7 +141,7 @@ def geo_vis_shapes_app(data):
 
     nuts_ids_columns = ['origin', 'destination']
     color_column = 'num_persons'
-    nuts_shapes = get_nuts_shapes(simplify=True, tol=1e-3)
+    nuts_shapes = get_nuts_shapes(simplify=False, tol=1e-3)
     avail_levels = sorted(nuts_shapes['LEVL_CODE'].unique())
 
     level = widgets.Dropdown(options=['all', *avail_levels], description='NUTS levels')
