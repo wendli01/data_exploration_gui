@@ -38,7 +38,8 @@ def get_nuts_shapes(shp_folder='nuts_data', simplify=False, tol=1e-3):
 
 def get_shapes_heatmap(data, nuts_ids_column, color_column, logarithmic: bool = False, cmap='viridis',
                        info_columns=('NUTS_ID', 'NUTS_NAME', 'num_persons'), info_widget_html=None,
-                       vmin=0, vmax=1, time_hist=None, full_data=None, date_limits=None):
+                       vmin=0, vmax=1, time_hist=None, full_data=None, date_limits=None, tweets_box=None,
+                       tweet_info_columns=('_timestamp', 'text_translated', 'num_persons', 'mode')):
     def get_layer(shapes: gpd.GeoDataFrame, color):
         def get_info_text():
             return '<h4>{}</h4>'.format(nuts_ids_column) + '<br>'.join(
@@ -46,17 +47,32 @@ def get_shapes_heatmap(data, nuts_ids_column, color_column, logarithmic: bool = 
 
         def hover_event_handler(**kwargs):
             info_widget_html.value = get_info_text()
-            nuts_id = shapes[nuts_ids_column].values[0]
-            out = interactive_output(plot_time_hist, dict(data=fixed(full_data[full_data[nuts_ids_column] == nuts_id]),
-                                                          timestamp_column=fixed('_timestamp'),
-                                                          value_column=fixed(color_column), xlims=fixed(date_limits)))
+
+            out = interactive_output(plot_time_hist,
+                                     dict(data=fixed(relevant_data), timestamp_column=fixed('_timestamp'),
+                                          value_column=fixed(color_column), xlims=fixed(date_limits)))
             time_hist.children = [out]
 
+        def click_event_handler(**kwargs):
+            if kwargs['event'] != 'click':
+                return
+            if tweets_box.placeholder == nuts_id:
+                tweets_box.placeholder, tweets_box.value = '', ''
+            elif len(relevant_data) > 0:
+                tweets_box.value = relevant_data[list(tweet_info_columns)].fillna('').sort_values(
+                    tweet_info_columns[0]).to_html()
+                tweets_box.placeholder = nuts_id
+
+        nuts_id = shapes[nuts_ids_column].values[0]
+        relevant_data = full_data[full_data[nuts_ids_column] == nuts_id].reset_index()
         style = {'color': color, 'fillColor': color, 'opacity': 0.5, 'weight': 1.9, 'dashArray': '2',
                  'fillOpacity': 0.2}
         hover_style = {'fillColor': 'blue', 'fillOpacity': 0.2}
         layer = ipyleaflet.GeoData(geo_dataframe=shapes, style=style, hover_style=hover_style)
-        layer.on_hover(hover_event_handler)
+        if time_hist is not None and info_widget_html is not None:
+            layer.on_hover(hover_event_handler)
+        if tweets_box is not None:
+            layer.on_click(click_event_handler)
         return layer
 
     def get_layer_group(shapes: gpd.GeoDataFrame, colors, group_name='', sorting_column='LEVL_CODE'):
@@ -106,14 +122,13 @@ def plot_cbar(name, vmin=0, vmax=1, logarithmic=False):
 
 
 def plot_time_hist(data, timestamp_column, value_column, xlims):
-    df = data.copy()
+    df = data.dropna(subset=[value_column, timestamp_column])
+    if len(df) == 0:
+        return
     dates = pd.to_datetime(df[timestamp_column]).apply(pd.Timestamp.date)
     time_hist = df.groupby(dates).sum()[value_column].reset_index()
     time_hist['zero'] = 0
-    if len(time_hist) == 0:
-        return
-    plt.box(False)
-    plt.xlim(*xlims)
+    plt.box(False), plt.xlim(*xlims)
     if len(time_hist) > 1:
         plot = plt.plot(time_hist[timestamp_column], time_hist[value_column], label=value_column, marker='o')
         plt.fill_between(time_hist[timestamp_column], time_hist[value_column], time_hist['zero'], alpha=.4)
@@ -132,7 +147,8 @@ def plot_geo_data_shapes(data, nuts_shapes, date_range, nuts_ids_columns=('origi
                              color_column=color_column, level=level)
         return get_shapes_heatmap(merged_df, nuts_ids_column=nuts_ids_column, color_column=color_column,
                                   logarithmic=logarithmic, cmap=cmap, info_widget_html=country_widget_html, vmin=vmin,
-                                  vmax=vmax, full_data=full_data, time_hist=time_hist, date_limits=date_range)
+                                  vmax=vmax, full_data=full_data, time_hist=time_hist, date_limits=date_range,
+                                  tweets_box=tweets_table)
 
     def date_filter(data, date_range):
         dates = pd.to_datetime(data[timestamp_column]).apply(pd.Timestamp.date)
@@ -143,7 +159,7 @@ def plot_geo_data_shapes(data, nuts_shapes, date_range, nuts_ids_columns=('origi
     m = ipyleaflet.Map(center=(51, 10), zoom=4, scroll_wheel_zoom=True)
     m.layout.height = '800px'
 
-    country_widget_html = widgets.HTML('''Hover over a Region''')
+    country_widget_html = widgets.HTML('''Hover over a Region<br>Click it to see tweets''')
     country_widget_html.layout.margin = '0px 20px 20px 20px'
     country_widget = ipyleaflet.WidgetControl(widget=country_widget_html, position='topright')
     m.add_control(country_widget)
@@ -154,10 +170,14 @@ def plot_geo_data_shapes(data, nuts_shapes, date_range, nuts_ids_columns=('origi
     cbar_widget = ipyleaflet.WidgetControl(widget=cbar_widget_box, position='bottomright')
     m.add_control(cbar_widget)
 
-    time_hist = widgets.HBox()  # interactive_output(plot_time_hist, dict(data=fixed(full_data), timestamp_column=fixed('_timestamp'),
-    #   value_column=fixed(color_column)))
+    time_hist = widgets.HBox([])
     time_hist_widget = ipyleaflet.WidgetControl(widget=time_hist, position='bottomleft')
     m.add_control(time_hist_widget)
+
+    tweets_table = widgets.HTML(layout=widgets.Layout(overflow='scroll_hidden'))
+    tweets_box = widgets.HBox([tweets_table], layout=Layout(max_height='400px', overflow_y='auto'))
+    tweets_box_widget = ipyleaflet.WidgetControl(widget=tweets_box, position='bottomleft')
+    m.add_control(tweets_box_widget)
 
     for nuts_ids_column in nuts_ids_columns:
         layer = get_geo_data(data, nuts_ids_column, vmin, vmax)
