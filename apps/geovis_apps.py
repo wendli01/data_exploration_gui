@@ -148,28 +148,47 @@ def plot_time_hist(data, timestamp_column, value_column, xlims):
     return plot
 
 
-def plot_geo_shapes_vis(data, nuts_shapes, date_range, nuts_ids_columns=('origin', 'destination'),
+def plot_geo_shapes_vis(data, nuts_shapes, nuts_ids_columns=('origin', 'destination'),
                         color_column='num_persons', timestamp_column='_timestamp'):
     def date_filter(data, date_range):
         dates = pd.to_datetime(data[timestamp_column]).apply(pd.Timestamp.date)
         return data[(date_range[0] <= dates) & (dates <= date_range[1])]
 
+    def change_date_range(change):
+        data = date_filter(app_state['data'], change['new']).dropna(subset=nuts_ids_columns, how='all')
+        merged_dfs = [merge_df(data=data, nuts_shapes=nuts_shapes, nuts_ids_column=nuts_ids_column,
+                               color_column=color_column, level=level_selector.value) for nuts_ids_column in
+                      nuts_ids_columns]
+        app_state['vmax'] = np.max([df[color_column].max() for df in merged_dfs])
+
+        m.layers = [l for l in m.layers if type(l) != ipyleaflet.LayerGroup]
+        for merged_df, nuts_ids_column in zip(merged_dfs, nuts_ids_columns):
+            layer = get_shapes_heatmap(data=merged_df, nuts_ids_column=nuts_ids_column, color_column=color_column,
+                                       info_widget_html=country_widget, vmin=app_state['vmin'], vmax=app_state['vmax'],
+                                       full_data=app_state['full_data'], time_hist=time_hist, date_limits=change['new'],
+                                       tweets_box=tweets_table, cmap=app_state['cmap'],
+                                       logarithmic=app_state['logarithmic'])
+            m.add_layer(layer)
+
     def change_level_layers(change):
         def change_layers(layer_group: ipyleaflet.LayerGroup, all_layers):
-            new_layers = [l for l in all_layers if l.data['features'][0]['properties']['LEVL_CODE'] == new_level]
-            layer_group.layers = new_layers if new_level != 'all' else all_layers
+            new_layers = [l for l in all_layers if
+                          l.data['features'][0]['properties']['LEVL_CODE'] == app_state['level']]
+            layer_group.layers = new_layers if app_state['level'] != 'all' else all_layers
 
         layer_groups = [l for l in m.layers if type(l) is ipyleaflet.LayerGroup]
-        if 'full_groups' not in state:
-            state['full_groups'] = [l.layers for l in layer_groups]
-        new_level = change['new']
-        for layer_group, full_group in zip(layer_groups, state['full_groups']):
+        if 'full_groups' not in app_state:
+            app_state['full_groups'] = [l.layers for l in layer_groups]
+        app_state['level'] = change['new']
+        for layer_group, full_group in zip(layer_groups, app_state['full_groups']):
             change_layers(layer_group, full_group)
 
-    def change_colormap(cmap, logarithmic):
+    def change_colormap():
+        cmap, logarithmic = app_state['cmap'], app_state['logarithmic']
+
         def update_layer(l):
             val = l.data['features'][0]['properties'][color_column]
-            color = get_color(val, cmap=cmap, vmin=vmin, vmax=vmax, logarithmic=logarithmic)
+            color = get_color(val, cmap=cmap, vmin=app_state['vmin'], vmax=app_state['vmax'], logarithmic=logarithmic)
             l.style.update({'fillColor': color, 'color': color})
             l.hover_style.update({'fillColor': color, 'color': color})
             new_layer = ipyleaflet.GeoJSON(data=l.data, style=l.style, hover_style=l.hover_style)
@@ -181,10 +200,12 @@ def plot_geo_shapes_vis(data, nuts_shapes, date_range, nuts_ids_columns=('origin
             layer_group.layers = [update_layer(l) for l in layer_group.layers]
 
     def change_colormap_name(change):
-        change_colormap(cmap=change['new'], logarithmic=logarithmic.value)
+        app_state['cmap'] = change['new']
+        change_colormap()
 
     def change_colormap_log(change):
-        change_colormap(cmap=cmap_selector.value, logarithmic=change['new'])
+        app_state['logarithmic'] = change['new']
+        change_colormap()
 
     def add_widget(widget, pos, margin='0px 0px 0px 0px'):
         widget.layout.margin = margin
@@ -192,22 +213,18 @@ def plot_geo_shapes_vis(data, nuts_shapes, date_range, nuts_ids_columns=('origin
         m.add_control(widget_control)
 
     def on_zoom(change, max_level=3, min_level=0, offset=-5):
-        if m.zoom != state['zoom']:
-            state['zoom'] = m.zoom
+        if m.zoom != app_state['zoom']:
+            app_state['zoom'] = m.zoom
             if level_on_zoom.value:
                 level = min(max_level, max(min_level, m.zoom + offset))
+                app_state['level'] = level
                 level_selector.value = level
                 change_level_layers(dict(new=level))
 
-    data = date_filter(data, date_range).dropna(subset=nuts_ids_columns, how='all')
-    full_data = data.copy()
-    state = dict(zoom=4)
-    m = ipyleaflet.Map(center=(51, 10), zoom=state['zoom'], scroll_wheel_zoom=True)
+    app_state = dict(zoom=4, data=data.dropna(subset=nuts_ids_columns, how='all'), cmap='viridis', logarithmic=False,
+                     vmin=1, vmax=1, full_data=data.copy())
+    m = ipyleaflet.Map(center=(51, 10), zoom=app_state['zoom'], scroll_wheel_zoom=True, zoom_control=False)
     m.layout.height = '800px'
-
-    merged_dfs = [merge_df(data=data, nuts_shapes=nuts_shapes, nuts_ids_column=nuts_ids_column,
-                           color_column=color_column, level='all') for nuts_ids_column in nuts_ids_columns]
-    vmin, vmax = 1, np.max([df[color_column].max() for df in merged_dfs])
 
     country_widget = widgets.HTML('''Hover over a Region<br>Click it to see tweets''')
     add_widget(country_widget, pos='topright', margin='10px')
@@ -219,6 +236,10 @@ def plot_geo_shapes_vis(data, nuts_shapes, date_range, nuts_ids_columns=('origin
     tweets_box = widgets.HBox([tweets_table], layout=Layout(max_height='400px', overflow_y='auto'))
     add_widget(tweets_box, pos='bottomleft')
 
+    time_slider = get_time_slider(app_state['data'])
+    time_slider.observe(change_date_range, type='change', names=('value',))
+    add_widget(time_slider, 'topleft', margin='5px')
+
     level_selector = widgets.Dropdown(options=['all', *sorted(nuts_shapes['LEVL_CODE'].unique())],
                                       description='NUTS levels', layout=Layout(max_width='180px'))
     level_selector.observe(handler=change_level_layers, type='change', names=('value',))
@@ -228,26 +249,22 @@ def plot_geo_shapes_vis(data, nuts_shapes, date_range, nuts_ids_columns=('origin
 
     cmap_selector = widgets.Dropdown(options=['viridis', 'inferno', 'magma', 'winter', 'cool'], description='colormap',
                                      layout=Layout(max_width='180px'))
-    logarithmic = widgets.Checkbox(description='logarithmic', layout=Layout(max_width='180px'))
-    cmap_control = widgets.VBox([cmap_selector, logarithmic])
+    logarithmic_cbox = widgets.Checkbox(description='logarithmic', layout=Layout(max_width='180px'))
+    cmap_control = widgets.VBox([cmap_selector, logarithmic_cbox])
     cmap_selector.observe(handler=change_colormap_name, type='change', names=('value',))
-    logarithmic.observe(handler=change_colormap_log, type='change', names=('value',))
+    logarithmic_cbox.observe(handler=change_colormap_log, type='change', names=('value',))
     add_widget(cmap_control, pos='topleft', margin='5px')
 
-    cbar_widget = interactive_output(plot_cbar, dict(name=cmap_selector, vmin=fixed(vmin), vmax=fixed(vmax),
-                                                     logarithmic=logarithmic))
+    cbar_widget = interactive_output(plot_cbar, dict(name=cmap_selector, vmin=fixed(app_state['vmin']),
+                                                     vmax=fixed(app_state['vmax']), logarithmic=logarithmic_cbox))
     add_widget(cbar_widget, pos='bottomright')
 
     m.add_control(ipyleaflet.LayersControl())
+    m.add_control(ipyleaflet.ZoomControl())
     m.add_control(ipyleaflet.FullScreenControl())
     m.observe(handler=on_zoom)
 
-    for merged_df, nuts_ids_column in zip(merged_dfs, nuts_ids_columns):
-        layer = get_shapes_heatmap(data=merged_df, nuts_ids_column=nuts_ids_column, color_column=color_column,
-                                   info_widget_html=country_widget, vmin=vmin, vmax=vmax, full_data=full_data,
-                                   time_hist=time_hist, date_limits=date_range, tweets_box=tweets_table)
-        m.add_layer(layer)
-
+    change_date_range(dict(new=time_slider.value))
     display(m)
 
 
@@ -255,13 +272,10 @@ def geo_vis_shapes_app(data, simplify_nuts_shapes=True):
     nuts_ids_columns = ['origin', 'destination']
     nuts_shapes = get_nuts_shapes(simplify=simplify_nuts_shapes, tol=1e-3)
 
-    time_slider = get_time_slider(data)
-
     geo_vis = interactive_output(plot_geo_shapes_vis,
                                  dict(nuts_shapes=fixed(nuts_shapes), data=fixed(data),
-                                      nuts_ids_columns=fixed(nuts_ids_columns), date_range=time_slider))
-
-    display(time_slider, geo_vis)
+                                      nuts_ids_columns=fixed(nuts_ids_columns)))
+    display(geo_vis)
 
 
 def get_marker_cluster(data, geom_column, title_columns=('text_translated', '_timestamp')):
