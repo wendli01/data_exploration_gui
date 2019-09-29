@@ -160,10 +160,10 @@ def plot_geo_shapes_vis(data, nuts_shapes, date_range, nuts_ids_columns=('origin
             layer_group.layers = new_layers if new_level != 'all' else all_layers
 
         layer_groups = [l for l in m.layers if type(l) is ipyleaflet.LayerGroup]
-        if len(full_groups) == 0:
-            full_groups.extend([l.layers for l in layer_groups])
+        if 'full_groups' not in state:
+            state['full_groups'] = [l.layers for l in layer_groups]
         new_level = change['new']
-        for layer_group, full_group in zip(layer_groups, full_groups):
+        for layer_group, full_group in zip(layer_groups, state['full_groups']):
             change_layers(layer_group, full_group)
 
     def change_colormap(cmap, logarithmic):
@@ -191,10 +191,18 @@ def plot_geo_shapes_vis(data, nuts_shapes, date_range, nuts_ids_columns=('origin
         widget_control = ipyleaflet.WidgetControl(widget=widget, position=pos)
         m.add_control(widget_control)
 
+    def on_zoom(change, max_level=3, min_level=0, offset=-5):
+        if m.zoom != state['zoom']:
+            state['zoom'] = m.zoom
+            if level_on_zoom.value:
+                level = min(max_level, max(min_level, m.zoom + offset))
+                level_selector.value = level
+                change_level_layers(dict(new=level))
+
     data = date_filter(data, date_range).dropna(subset=nuts_ids_columns, how='all')
     full_data = data.copy()
-    full_groups = []
-    m = ipyleaflet.Map(center=(51, 10), zoom=4, scroll_wheel_zoom=True)
+    state = dict(zoom=4)
+    m = ipyleaflet.Map(center=(51, 10), zoom=state['zoom'], scroll_wheel_zoom=True)
     m.layout.height = '800px'
 
     merged_dfs = [merge_df(data=data, nuts_shapes=nuts_shapes, nuts_ids_column=nuts_ids_column,
@@ -214,7 +222,9 @@ def plot_geo_shapes_vis(data, nuts_shapes, date_range, nuts_ids_columns=('origin
     level_selector = widgets.Dropdown(options=['all', *sorted(nuts_shapes['LEVL_CODE'].unique())],
                                       description='NUTS levels', layout=Layout(max_width='180px'))
     level_selector.observe(handler=change_level_layers, type='change', names=('value',))
-    add_widget(level_selector, pos='topleft', margin='5px')
+    level_on_zoom = widgets.Checkbox(value=True, description='with zoom', layout=Layout(max_width='180px'))
+    level_control = widgets.VBox([level_selector, level_on_zoom])
+    add_widget(level_control, pos='topleft', margin='5px')
 
     cmap_selector = widgets.Dropdown(options=['viridis', 'inferno', 'magma', 'winter', 'cool'], description='colormap',
                                      layout=Layout(max_width='180px'))
@@ -230,6 +240,7 @@ def plot_geo_shapes_vis(data, nuts_shapes, date_range, nuts_ids_columns=('origin
 
     m.add_control(ipyleaflet.LayersControl())
     m.add_control(ipyleaflet.FullScreenControl())
+    m.observe(handler=on_zoom)
 
     for merged_df, nuts_ids_column in zip(merged_dfs, nuts_ids_columns):
         layer = get_shapes_heatmap(data=merged_df, nuts_ids_column=nuts_ids_column, color_column=color_column,
