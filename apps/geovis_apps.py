@@ -303,9 +303,10 @@ def _to_html(val):
         return ', '.join(list(map(_to_html, val)))
     if type(val) is str:
         if val.startswith('http'):
+            disp = val
             if val.endswith('png') or val.endswith('.jpg'):
-                return '<img src="{}" width="250px" style="padding:3px">'.format(val, val)
-            return '<a href={} target="_blank">{}</a>'.format(val, val)
+                disp = '<img src="{}" width="250px" style="padding:3px">'.format(val, val)
+            return '<a href={} target="_blank">{}</a>'.format(val, disp)
     return str(val)
 
 
@@ -355,7 +356,7 @@ def plot_geo_data_cluster(data, geom_column, timestamp_column, date_range, title
                 app_state['is_in_bounds'] is None or not np.array_equal(is_in_bounds, app_state['is_in_bounds'])):
             if is_in_bounds.sum() > 0:
                 tweets_table.value = data.loc[is_in_bounds, title_columns].reset_index(drop=True).to_html(
-                    formatters={'media': _to_html}, escape=False, na_rep='')
+                    formatters={'media': _to_html}, escape=False, na_rep='', index=False)
             else:
                 tweets_table.value = ''
         tweets_table_cb.description = 'Show {} Tweets'.format(is_in_bounds.sum())
@@ -372,7 +373,7 @@ def plot_geo_data_cluster(data, geom_column, timestamp_column, date_range, title
     tweets_table = widgets.HTML(layout=widgets.Layout(overflow='scroll_hidden'))
     tweets_table_box = widgets.HBox([tweets_table],
                                     layout=Layout(max_height='500px', overflow_y='auto', max_width='900px'))
-    tweets_table_cb = widgets.Checkbox(value=False, layout=Layout(align='left'))
+    tweets_table_cb = widgets.Checkbox(value=False)
     tweets_table_cb.observe(toggle_tweets_table_visibility
                             , type='change', names=('value',))
     tweets_box = widgets.VBox([tweets_table_cb, tweets_table_box])
