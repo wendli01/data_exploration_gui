@@ -123,13 +123,6 @@ def merge_df(data, nuts_shapes, nuts_ids_column, color_column, level='all'):
     return merged_df.dropna(subset=['NUTS_ID', color_column])
 
 
-def plot_cbar(name, vmin=0, vmax=1, logarithmic=False):
-    fig, ax = plt.subplots(figsize=(.3, 10))
-    norm = matplotlib.colors.LogNorm(vmin, vmax) if logarithmic else matplotlib.colors.Normalize(vmin, vmax)
-    cbar = matplotlib.colorbar.ColorbarBase(ax, cmap=plt.get_cmap(name), norm=norm, orientation='vertical')
-    return cbar
-
-
 def plot_time_hist(data, timestamp_column, value_column, xlims):
     df = data.dropna(subset=[value_column, timestamp_column])
     if len(df) == 0:
@@ -150,6 +143,15 @@ def plot_time_hist(data, timestamp_column, value_column, xlims):
 
 def plot_geo_shapes_vis(data, nuts_shapes, nuts_ids_columns=('origin', 'destination'),
                         color_column='num_persons', timestamp_column='_timestamp'):
+    def plot_cbar(name, logarithmic=False):
+        vmin, vmax = app_state['vmin'], app_state['vmax']
+        if vmin == vmax or any(pd.isna([vmin, vmax])):
+            return
+        fig, ax = plt.subplots(figsize=(.3, 10))
+        norm = matplotlib.colors.LogNorm(vmin, vmax) if logarithmic else matplotlib.colors.Normalize(vmin, vmax)
+        cbar = matplotlib.colorbar.ColorbarBase(ax, cmap=plt.get_cmap(name), norm=norm, orientation='vertical')
+        return cbar
+
     def date_filter(data, date_range):
         dates = pd.to_datetime(data[timestamp_column]).apply(pd.Timestamp.date)
         return data[(date_range[0] <= dates) & (dates <= date_range[1])]
@@ -160,6 +162,7 @@ def plot_geo_shapes_vis(data, nuts_shapes, nuts_ids_columns=('origin', 'destinat
                                color_column=color_column, level=level_selector.value) for nuts_ids_column in
                       nuts_ids_columns]
         app_state['vmax'] = np.max([df[color_column].max() for df in merged_dfs])
+        interactive_output(plot_cbar, dict(name=cmap_selector, logarithmic=logarithmic_cbox))
 
         m.layers = [l for l in m.layers if type(l) != ipyleaflet.LayerGroup]
         for merged_df, nuts_ids_column in zip(merged_dfs, nuts_ids_columns):
@@ -172,6 +175,8 @@ def plot_geo_shapes_vis(data, nuts_shapes, nuts_ids_columns=('origin', 'destinat
 
         if 'full_groups' not in app_state:
             app_state['full_groups'] = [l.layers for l in m.layers if type(l) is ipyleaflet.LayerGroup]
+
+        cbar_widget.children = [interactive_output(plot_cbar, dict(name=cmap_selector, logarithmic=logarithmic_cbox))]
 
     def change_level_layers(change={}):
         def change_layers(layer_group: ipyleaflet.LayerGroup, all_layers: list):
@@ -257,8 +262,7 @@ def plot_geo_shapes_vis(data, nuts_shapes, nuts_ids_columns=('origin', 'destinat
     logarithmic_cbox.observe(handler=change_colormap_log, type='change', names=('value',))
     add_widget(cmap_control, pos='topleft', margin='5px')
 
-    cbar_widget = interactive_output(plot_cbar, dict(name=cmap_selector, vmin=fixed(app_state['vmin']),
-                                                     vmax=fixed(app_state['vmax']), logarithmic=logarithmic_cbox))
+    cbar_widget = widgets.HBox([interactive_output(plot_cbar, dict(name=cmap_selector, logarithmic=logarithmic_cbox))])
     add_widget(cbar_widget, pos='bottomright')
 
     m.add_control(ipyleaflet.LayersControl())
