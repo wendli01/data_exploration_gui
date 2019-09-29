@@ -220,6 +220,16 @@ def plot_geo_shapes_vis(data, nuts_shapes, nuts_ids_columns=('origin', 'destinat
         widget_control = ipyleaflet.WidgetControl(widget=widget, position=pos)
         m.add_control(widget_control)
 
+    def loading_wrapper(function):
+        def loading_func(*args, **kwargs):
+            loading = ipyleaflet.WidgetControl(widget=widgets.HTML('loading...', layout=Layout(margin='10px')),
+                                               position='bottomright')
+            m.add_control(loading)
+            function(*args, **kwargs)
+            m.remove_control(loading)
+
+        return loading_func
+
     def on_zoom(change, max_level=3, min_level=0, offset=-5):
         if m.zoom != app_state['zoom']:
             app_state['zoom'] = m.zoom
@@ -244,12 +254,12 @@ def plot_geo_shapes_vis(data, nuts_shapes, nuts_ids_columns=('origin', 'destinat
     add_widget(tweets_box, pos='bottomleft')
 
     time_slider = get_time_slider(app_state['data'])
-    time_slider.observe(change_date_range, type='change', names=('value',))
+    time_slider.observe(loading_wrapper(change_date_range), type='change', names=('value',))
     add_widget(time_slider, 'topleft', margin='5px')
 
     level_selector = widgets.Dropdown(options=['all', *sorted(nuts_shapes['LEVL_CODE'].unique())],
                                       description='NUTS levels', layout=Layout(max_width='180px'))
-    level_selector.observe(handler=change_level_layers, type='change', names=('value',))
+    level_selector.observe(handler=loading_wrapper(change_level_layers), type='change', names=('value',))
     level_on_zoom = widgets.Checkbox(value=True, description='with zoom', layout=Layout(max_width='180px'))
     level_control = widgets.VBox([level_selector, level_on_zoom])
     add_widget(level_control, pos='topleft', margin='5px')
@@ -258,8 +268,8 @@ def plot_geo_shapes_vis(data, nuts_shapes, nuts_ids_columns=('origin', 'destinat
                                      layout=Layout(max_width='180px'))
     logarithmic_cbox = widgets.Checkbox(description='logarithmic', layout=Layout(max_width='180px'))
     cmap_control = widgets.VBox([cmap_selector, logarithmic_cbox])
-    cmap_selector.observe(handler=change_colormap_name, type='change', names=('value',))
-    logarithmic_cbox.observe(handler=change_colormap_log, type='change', names=('value',))
+    cmap_selector.observe(handler=loading_wrapper(change_colormap_name), type='change', names=('value',))
+    logarithmic_cbox.observe(handler=loading_wrapper(change_colormap_log), type='change', names=('value',))
     add_widget(cmap_control, pos='topleft', margin='5px')
 
     cbar_widget = widgets.HBox([interactive_output(plot_cbar, dict(name=cmap_selector, logarithmic=logarithmic_cbox))])
