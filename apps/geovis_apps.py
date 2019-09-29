@@ -38,7 +38,7 @@ def get_nuts_shapes(shp_folder='nuts_data', simplify=False, tol=1e-3):
 
 def get_shapes_heatmap(data, nuts_ids_column, color_column, logarithmic: bool = False, cmap='viridis',
                        info_columns=('NUTS_ID', 'NUTS_NAME', 'num_persons'), info_widget_html=None,
-                       vmin=0, vmax=1, time_hist=None, full_data=None, date_limits=None, tweets_box=None,
+                       vmin=0, vmax=1, time_hist=None, full_data=None, date_limits=None, tweets_table=None,
                        tweet_info_columns=('_timestamp', 'text_translated', 'num_persons', 'mode')):
     def get_layer(shapes: gpd.GeoDataFrame, color):
         def get_info_text():
@@ -56,25 +56,26 @@ def get_shapes_heatmap(data, nuts_ids_column, color_column, logarithmic: bool = 
         def click_event_handler(**kwargs):
             if kwargs['event'] != 'click':
                 return
-            if tweets_box.placeholder == nuts_id:
-                tweets_box.placeholder, tweets_box.value = '', ''
+            if tweets_table.placeholder == nuts_id:
+                tweets_table.placeholder, tweets_table.value = '', ''
             elif len(relevant_data) > 0:
-                tweets_box.value = relevant_data[list(tweet_info_columns)].fillna('').sort_values(
+                header = '<b>{} {}</b>'.format(nuts_ids_column, shapes[info_columns[0]].values[0])
+                tweets_table.value = header + relevant_data[list(tweet_info_columns)].fillna('').sort_values(
                     tweet_info_columns[0]).to_html()
-                tweets_box.layout.margin = '5px'
-                tweets_box.placeholder = nuts_id
+                tweets_table.layout.margin = '5px'
+                tweets_table.placeholder = nuts_id
 
         nuts_id = shapes[nuts_ids_column].values[0]
         style = {'color': color, 'fillColor': color, 'opacity': 0.5, 'weight': 1.9, 'dashArray': '2',
                  'fillOpacity': 0.2}
         hover_style = {'fillColor': color, 'fillOpacity': 0.5, 'weight': 5}
         layer = ipyleaflet.GeoData(geo_dataframe=shapes, style=style, hover_style=hover_style)
-        if full_data is None or tweets_box is None or time_hist is None:
+        if full_data is None or tweets_table is None or time_hist is None:
             return layer
         relevant_data = full_data[full_data[nuts_ids_column].str.startswith(nuts_id, na=False)].reset_index()
         if time_hist is not None and info_widget_html is not None:
             layer.on_hover(hover_event_handler)
-        if tweets_box is not None:
+        if tweets_table is not None:
             layer.on_click(click_event_handler)
         return layer
 
@@ -169,7 +170,7 @@ def plot_geo_shapes_vis(data, nuts_shapes, nuts_ids_columns=('origin', 'destinat
             layer = get_shapes_heatmap(data=merged_df, nuts_ids_column=nuts_ids_column, color_column=color_column,
                                        info_widget_html=country_widget, vmin=app_state['vmin'], vmax=app_state['vmax'],
                                        full_data=app_state['full_data'], time_hist=time_hist, date_limits=change['new'],
-                                       tweets_box=tweets_table, cmap=app_state['cmap'],
+                                       tweets_table=tweets_table, cmap=app_state['cmap'],
                                        logarithmic=app_state['logarithmic'])
             m.add_layer(layer)
 
@@ -262,7 +263,6 @@ def plot_geo_shapes_vis(data, nuts_shapes, nuts_ids_columns=('origin', 'destinat
     level_selector.observe(handler=loading_wrapper(change_level_layers), type='change', names=('value',))
     level_on_zoom = widgets.Checkbox(value=True, description='with zoom', layout=Layout(max_width='180px'))
     level_control = widgets.VBox([level_selector, level_on_zoom])
-    add_widget(level_control, pos='topleft', margin='5px')
 
     cmap_selector = widgets.Dropdown(options=['viridis', 'inferno', 'magma', 'winter', 'cool'], description='colormap',
                                      layout=Layout(max_width='180px'))
@@ -270,13 +270,12 @@ def plot_geo_shapes_vis(data, nuts_shapes, nuts_ids_columns=('origin', 'destinat
     cmap_control = widgets.VBox([cmap_selector, logarithmic_cbox])
     cmap_selector.observe(handler=loading_wrapper(change_colormap_name), type='change', names=('value',))
     logarithmic_cbox.observe(handler=loading_wrapper(change_colormap_log), type='change', names=('value',))
-    add_widget(cmap_control, pos='topleft', margin='5px')
+    add_widget(widgets.HBox([level_control, cmap_control]), pos='topleft', margin='5px')
 
     cbar_widget = widgets.HBox([interactive_output(plot_cbar, dict(name=cmap_selector, logarithmic=logarithmic_cbox))])
     add_widget(cbar_widget, pos='bottomright')
 
     m.add_control(ipyleaflet.LayersControl())
-    m.add_control(ipyleaflet.ZoomControl())
     m.add_control(ipyleaflet.FullScreenControl())
     m.observe(handler=on_zoom)
 
