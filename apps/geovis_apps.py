@@ -298,17 +298,20 @@ def _wkb_hex_to_point(s):
     return list(shapely.wkb.loads(s, hex=True).coords)[0][::-1]
 
 
+def _to_html(val):
+    if type(val) in (list, tuple, np.array):
+        return ', '.join(list(map(_to_html, val)))
+    if type(val) is str:
+        if val.startswith('http'):
+            if val.endswith('png') or val.endswith('.jpg'):
+                return '<img src="{}" width="250px" style="padding:3px">'.format(val, val)
+            return '<a href={} target="_blank">{}</a>'.format(val, val)
+    return str(val)
+
+
 def get_marker_cluster(data, geom_column, info_box: widgets.HTML, title_columns=()):
     def get_title(d):
-        def to_html(val):
-            if type(val) in (list, tuple, np.array):
-                return ', '.join(list(map(to_html, val)))
-            if type(val) is str:
-                if val.startswith('http'):
-                    return '<a href={} target="_blank">{}</a>'.format(val, val)
-            return str(val)
-
-        return '<br>'.join([to_html(d[c]) for c in title_columns if d[c] not in (np.nan, None)])
+        return '<br>'.join([_to_html(d[c]) for c in title_columns if d[c] not in (np.nan, None)])
 
     def get_hover_event_handler(info):
         def hover_event_handler(**kwargs):
@@ -331,14 +334,52 @@ def plot_geo_data_cluster(data, geom_column, timestamp_column, date_range, title
         dates = pd.to_datetime(data[timestamp_column]).apply(pd.Timestamp.date)
         return data[(date_range[0] <= dates) & (dates <= date_range[1])]
 
+    def toggle_tweets_table_visibility(change):
+        app_state['is_in_bounds'] = None
+        if change['old'] and not change['new']:
+            tweets_table.value, app_state['is_in_bounds'] = '', None
+        else:
+            show_tweets_table()
+
+    def show_tweets_table(*_):
+        def in_bounds(loc):
+            return all(bounds[0] < loc) and all(loc < bounds[1])
+
+        if len(m.bounds) == 0:
+            return
+
+        bounds = np.array(m.bounds)
+        locs = data[geom_column].apply(_wkb_hex_to_point)
+        is_in_bounds = locs.apply(in_bounds)
+        if tweets_table_cb.value and (
+                app_state['is_in_bounds'] is None or not np.array_equal(is_in_bounds, app_state['is_in_bounds'])):
+            if is_in_bounds.sum() > 0:
+                tweets_table.value = data.loc[is_in_bounds, title_columns].reset_index(drop=True).to_html(
+                    formatters={'media': _to_html}, escape=False, na_rep='')
+            else:
+                tweets_table.value = ''
+        tweets_table_cb.description = 'Show {} Tweets'.format(is_in_bounds.sum())
+        app_state['is_in_bounds'] = is_in_bounds
+
     data = date_filter(data, date_range).dropna(subset=[geom_column])
     m = ipyleaflet.Map(center=(51, 10), zoom=4, scroll_wheel_zoom=True)
     m.layout.height = '800px'
+    app_state = dict(is_in_bounds=None)
 
     info_box = widgets.HTML('Hover over a marker', layout=Layout(margin='10px'))
     m.add_control(ipyleaflet.WidgetControl(widget=info_box, position='topright'))
 
-    m.add_layer(get_marker_cluster(data, geom_column, title_columns=title_columns, info_box=info_box))
+    tweets_table = widgets.HTML(layout=widgets.Layout(overflow='scroll_hidden'))
+    tweets_table_box = widgets.HBox([tweets_table],
+                                    layout=Layout(max_height='500px', overflow_y='auto', max_width='900px'))
+    tweets_table_cb = widgets.Checkbox(value=False, layout=Layout(align='left'))
+    tweets_table_cb.observe(toggle_tweets_table_visibility
+                            , type='change', names=('value',))
+    tweets_box = widgets.VBox([tweets_table_cb, tweets_table_box])
+    m.add_control(ipyleaflet.WidgetControl(widget=tweets_box, position='bottomleft'))
+
+    marker_clusters = get_marker_cluster(data, geom_column, title_columns=title_columns, info_box=info_box)
+    m.add_layer(marker_clusters)
 
     heatmap = ipyleaflet.Heatmap(locations=list(data[geom_column].apply(_wkb_hex_to_point).values), name='Heatmap',
                                  min_opacity=.1, blur=20, radius=20, max_zoom=12)
@@ -346,6 +387,7 @@ def plot_geo_data_cluster(data, geom_column, timestamp_column, date_range, title
     m.add_layer(heatmap)
     m.add_control(ipyleaflet.FullScreenControl())
     m.add_control(ipyleaflet.LayersControl())
+    m.observe(show_tweets_table)
     display(m)
 
 
