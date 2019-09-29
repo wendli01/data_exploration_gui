@@ -64,11 +64,13 @@ def get_shapes_heatmap(data, nuts_ids_column, color_column, logarithmic: bool = 
                 tweets_box.placeholder = nuts_id
 
         nuts_id = shapes[nuts_ids_column].values[0]
-        relevant_data = full_data[full_data[nuts_ids_column].str.startswith(nuts_id, na=False)].reset_index()
         style = {'color': color, 'fillColor': color, 'opacity': 0.5, 'weight': 1.9, 'dashArray': '2',
                  'fillOpacity': 0.2}
         hover_style = {'fillColor': 'blue', 'fillOpacity': 0.2}
         layer = ipyleaflet.GeoData(geo_dataframe=shapes, style=style, hover_style=hover_style)
+        if full_data is None or tweets_box is None or time_hist is None:
+            return layer
+        relevant_data = full_data[full_data[nuts_ids_column].str.startswith(nuts_id, na=False)].reset_index()
         if time_hist is not None and info_widget_html is not None:
             layer.on_hover(hover_event_handler)
         if tweets_box is not None:
