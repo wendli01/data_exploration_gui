@@ -170,16 +170,18 @@ def plot_geo_shapes_vis(data, nuts_shapes, nuts_ids_columns=('origin', 'destinat
                                        logarithmic=app_state['logarithmic'])
             m.add_layer(layer)
 
-    def change_level_layers(change):
-        def change_layers(layer_group: ipyleaflet.LayerGroup, all_layers):
+        if 'full_groups' not in app_state:
+            app_state['full_groups'] = [l.layers for l in m.layers if type(l) is ipyleaflet.LayerGroup]
+
+    def change_level_layers(change={}):
+        def change_layers(layer_group: ipyleaflet.LayerGroup, all_layers: list):
             new_layers = [l for l in all_layers if
                           l.data['features'][0]['properties']['LEVL_CODE'] == app_state['level']]
             layer_group.layers = new_layers if app_state['level'] != 'all' else all_layers
 
         layer_groups = [l for l in m.layers if type(l) is ipyleaflet.LayerGroup]
-        if 'full_groups' not in app_state:
-            app_state['full_groups'] = [l.layers for l in layer_groups]
-        app_state['level'] = change['new']
+        if 'new' in change:
+            app_state['level'] = change['new']
         for layer_group, full_group in zip(layer_groups, app_state['full_groups']):
             change_layers(layer_group, full_group)
 
@@ -196,8 +198,9 @@ def plot_geo_shapes_vis(data, nuts_shapes, nuts_ids_columns=('origin', 'destinat
             new_layer._click_callbacks = l._click_callbacks
             return new_layer
 
-        for layer_group in [l for l in m.layers if type(l) is ipyleaflet.LayerGroup]:
-            layer_group.layers = [update_layer(l) for l in layer_group.layers]
+        app_state['full_groups'] = [[update_layer(l) for l in layers] for layers in app_state['full_groups']]
+
+        change_level_layers()
 
     def change_colormap_name(change):
         app_state['cmap'] = change['new']
@@ -219,10 +222,9 @@ def plot_geo_shapes_vis(data, nuts_shapes, nuts_ids_columns=('origin', 'destinat
                 level = min(max_level, max(min_level, m.zoom + offset))
                 app_state['level'] = level
                 level_selector.value = level
-                change_level_layers(dict(new=level))
 
     app_state = dict(zoom=4, data=data.dropna(subset=nuts_ids_columns, how='all'), cmap='viridis', logarithmic=False,
-                     vmin=1, vmax=1, full_data=data.copy())
+                     vmin=1, vmax=1, full_data=data.copy(), level='all')
     m = ipyleaflet.Map(center=(51, 10), zoom=app_state['zoom'], scroll_wheel_zoom=True, zoom_control=False)
     m.layout.height = '800px'
 
