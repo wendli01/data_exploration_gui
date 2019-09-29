@@ -294,19 +294,19 @@ def geo_vis_shapes_app(data, simplify_nuts_shapes=True):
     display(geo_vis)
 
 
-def get_marker_cluster(data, geom_column, title_columns=('text_translated', '_timestamp')):
-    def wkb_hex_to_point(s):
-        return list(shapely.wkb.loads(s, hex=True).coords)[0][::-1]
+def _wkb_hex_to_point(s):
+    return list(shapely.wkb.loads(s, hex=True).coords)[0][::-1]
 
+
+def get_marker_cluster(data, geom_column, title_columns=('text_translated', '_timestamp')):
     def get_title(d):
         return '\n'.join([str(d[c]) for c in title_columns if d[c] not in (np.nan, None)])
 
-    data = data.dropna(subset=[geom_column])
-    locs = data[geom_column].apply(wkb_hex_to_point)
+    locs = data[geom_column].apply(_wkb_hex_to_point)
     dicts = data.to_dict(orient='rows')
 
     markers = [ipyleaflet.Marker(location=loc, title=get_title(d), draggable=False) for loc, d in zip(locs, dicts)]
-    return ipyleaflet.MarkerCluster(markers=markers)
+    return ipyleaflet.MarkerCluster(markers=markers, name='Marker Cluster')
 
 
 def plot_geo_data_cluster(data, geom_column, timestamp_column, date_range, title_columns):
@@ -314,11 +314,17 @@ def plot_geo_data_cluster(data, geom_column, timestamp_column, date_range, title
         dates = pd.to_datetime(data[timestamp_column]).apply(pd.Timestamp.date)
         return data[(date_range[0] <= dates) & (dates <= date_range[1])]
 
-    data = date_filter(data, date_range)
+    data = date_filter(data, date_range).dropna(subset=[geom_column])
     m = ipyleaflet.Map(center=(51, 10), zoom=4, scroll_wheel_zoom=True)
     m.layout.height = '800px'
     m.add_layer(get_marker_cluster(data, geom_column, title_columns=title_columns))
+
+    heatmap = ipyleaflet.Heatmap(locations=list(data[geom_column].apply(_wkb_hex_to_point).values), name='Heatmap',
+                                 min_opacity=.1, blur=20, radius=20, max_zoom=12)
+
+    m.add_layer(heatmap)
     m.add_control(ipyleaflet.FullScreenControl())
+    m.add_control(ipyleaflet.LayersControl())
     display(m)
 
 
