@@ -298,15 +298,32 @@ def _wkb_hex_to_point(s):
     return list(shapely.wkb.loads(s, hex=True).coords)[0][::-1]
 
 
-def get_marker_cluster(data, geom_column, title_columns=('text_translated', '_timestamp')):
+def get_marker_cluster(data, geom_column, info_box: widgets.HTML, title_columns=()):
     def get_title(d):
-        return '\n'.join([str(d[c]) for c in title_columns if d[c] not in (np.nan, None)])
+        def to_html(val):
+            if type(val) in (list, tuple, np.array):
+                return ', '.join(list(map(to_html, val)))
+            if type(val) is str:
+                if val.startswith('http'):
+                    return '<a href={} target="_blank">{}</a>'.format(val, val)
+            return str(val)
+
+        return '<br>'.join([to_html(d[c]) for c in title_columns if d[c] not in (np.nan, None)])
+
+    def get_hover_event_handler(info):
+        def hover_event_handler(**kwargs):
+            info_box.value = info
+
+        return hover_event_handler
 
     locs = data[geom_column].apply(_wkb_hex_to_point)
     dicts = data.to_dict(orient='rows')
 
-    markers = [ipyleaflet.Marker(location=loc, title=get_title(d), draggable=False) for loc, d in zip(locs, dicts)]
-    return ipyleaflet.MarkerCluster(markers=markers, name='Marker Cluster')
+    markers = [ipyleaflet.Marker(location=loc, title=str(loc), draggable=False) for loc in locs]
+    clusters = ipyleaflet.MarkerCluster(markers=markers, name='Marker Cluster')
+    for marker, d in zip(clusters.markers, dicts):
+        marker.on_mouseover(get_hover_event_handler(get_title(d)))
+    return clusters
 
 
 def plot_geo_data_cluster(data, geom_column, timestamp_column, date_range, title_columns):
@@ -317,7 +334,11 @@ def plot_geo_data_cluster(data, geom_column, timestamp_column, date_range, title
     data = date_filter(data, date_range).dropna(subset=[geom_column])
     m = ipyleaflet.Map(center=(51, 10), zoom=4, scroll_wheel_zoom=True)
     m.layout.height = '800px'
-    m.add_layer(get_marker_cluster(data, geom_column, title_columns=title_columns))
+
+    info_box = widgets.HTML('Hover over a marker', layout=Layout(margin='10px'))
+    m.add_control(ipyleaflet.WidgetControl(widget=info_box, position='topright'))
+
+    m.add_layer(get_marker_cluster(data, geom_column, title_columns=title_columns, info_box=info_box))
 
     heatmap = ipyleaflet.Heatmap(locations=list(data[geom_column].apply(_wkb_hex_to_point).values), name='Heatmap',
                                  min_opacity=.1, blur=20, radius=20, max_zoom=12)
@@ -331,7 +352,7 @@ def plot_geo_data_cluster(data, geom_column, timestamp_column, date_range, title
 def geo_vis_cluster_app(data, timestamp_column='_timestamp', geom_column='geom_tweet'):
     time_slider = get_time_slider(data)
     title_columns = widgets.SelectMultiple(options=sorted(data.columns), description='Information to show',
-                                           value=['text_translated', '_timestamp'])
+                                           value=('text', 'text_translated', '_timestamp', 'media'))
     title_columns_tip = widgets.HTML('Select multiple by dragging or ctrl + click <br> Deselect with ctrl + click')
     title_columns_controls = widgets.HBox([title_columns, title_columns_tip])
 
