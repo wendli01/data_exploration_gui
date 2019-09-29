@@ -144,14 +144,26 @@ def plot_time_hist(data, timestamp_column, value_column, xlims):
 
 
 def plot_geo_shapes_vis(data, nuts_shapes, date_range, nuts_ids_columns=('origin', 'destination'),
-                        color_column='num_persons', logarithmic=False, cmap='viridis', timestamp_column='_timestamp',
-                        level='all'):
+                        color_column='num_persons', logarithmic=False, cmap='viridis', timestamp_column='_timestamp'):
     def date_filter(data, date_range):
         dates = pd.to_datetime(data[timestamp_column]).apply(pd.Timestamp.date)
         return data[(date_range[0] <= dates) & (dates <= date_range[1])]
 
+    def show_level_layers(change):
+        def change_layers(layer_group: ipyleaflet.LayerGroup, all_layers):
+            new_layers = [l for l in all_layers if l.data['features'][0]['properties']['LEVL_CODE'] == new_level]
+            layer_group.layers = new_layers if new_level != 'all' else all_layers
+
+        layer_groups = [l for l in m.layers if type(l) is ipyleaflet.LayerGroup]
+        if len(full_groups) == 0:
+            full_groups.extend([l.layers for l in layer_groups])
+        new_level = change['new']
+        for layer_group, full_group in zip(layer_groups, full_groups):
+            change_layers(layer_group, full_group)
+
     data = date_filter(data, date_range).dropna(subset=nuts_ids_columns, how='all')
     full_data = data.copy()
+    full_groups = []
     m = ipyleaflet.Map(center=(51, 10), zoom=4, scroll_wheel_zoom=True)
     m.layout.height = '800px'
 
@@ -178,6 +190,13 @@ def plot_geo_shapes_vis(data, nuts_shapes, date_range, nuts_ids_columns=('origin
     tweets_box_widget = ipyleaflet.WidgetControl(widget=tweets_box, position='bottomleft')
     m.add_control(tweets_box_widget)
 
+    level_selector = widgets.Dropdown(options=['all', *sorted(nuts_shapes['LEVL_CODE'].unique())],
+                                      description='NUTS levels')
+
+    level_selector.observe(handler=show_level_layers, type='change', names=('value',))
+    level_widget = ipyleaflet.WidgetControl(widget=level_selector, position='topleft')
+    m.add_control(level_widget)
+
     m.add_control(ipyleaflet.LayersControl())
     m.add_control(ipyleaflet.FullScreenControl())
 
@@ -194,18 +213,15 @@ def plot_geo_shapes_vis(data, nuts_shapes, date_range, nuts_ids_columns=('origin
 def geo_vis_shapes_app(data, simplify_nuts_shapes=True):
     nuts_ids_columns = ['origin', 'destination']
     nuts_shapes = get_nuts_shapes(simplify=simplify_nuts_shapes, tol=1e-3)
-    avail_levels = sorted(nuts_shapes['LEVL_CODE'].unique())
 
-    level = widgets.Dropdown(options=['all', *avail_levels], description='NUTS levels')
     cmap = widgets.Dropdown(options=['viridis', 'inferno', 'magma', 'winter', 'cool'], description='colormap')
     logarithmic = widgets.Checkbox(description='logarithmic')
     time_slider = get_time_slider(data)
-    controls = widgets.VBox([widgets.HBox([level, cmap, logarithmic]), time_slider])
+    controls = widgets.VBox([widgets.HBox([cmap, logarithmic]), time_slider])
 
     geo_vis = interactive_output(plot_geo_shapes_vis,
                                  dict(nuts_shapes=fixed(nuts_shapes), data=fixed(data), logarithmic=logarithmic,
-                                      cmap=cmap, nuts_ids_columns=fixed(nuts_ids_columns), level=level,
-                                      date_range=time_slider))
+                                      cmap=cmap, nuts_ids_columns=fixed(nuts_ids_columns), date_range=time_slider))
 
     display(controls, geo_vis)
 
