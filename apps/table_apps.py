@@ -94,7 +94,8 @@ def table_app(df):
         save_status.value = '\t  sucessfully saved {} rows as {}.'.format(len(filtered_df), save_fn.value)
 
     def plot_filtered(df, required, search_column, search_term, plot_column):
-        filtered_df = filter_df(df, required=required, search_column=search_column, search_term=search_term)
+        filtered_df = filter_df(df, order_by=order_by.value, required=required, search_column=search_column,
+                                search_term=search_term)
         plot_column_dist(df=filtered_df, column=plot_column)
 
     nb_items = widgets.Dropdown(options=[10, 20, 50], description='items per page', layout=Layout(width='20%'))
