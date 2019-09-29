@@ -47,10 +47,10 @@ def get_shapes_heatmap(data, nuts_ids_column, color_column, logarithmic: bool = 
 
         def hover_event_handler(**kwargs):
             info_widget_html.value = get_info_text()
-
             out = interactive_output(plot_time_hist,
                                      dict(data=fixed(relevant_data), timestamp_column=fixed('_timestamp'),
                                           value_column=fixed(color_column), xlims=fixed(date_limits)))
+            time_hist.layout.margin = '5px'
             time_hist.children = [out]
 
         def click_event_handler(**kwargs):
@@ -61,6 +61,7 @@ def get_shapes_heatmap(data, nuts_ids_column, color_column, logarithmic: bool = 
             elif len(relevant_data) > 0:
                 tweets_box.value = relevant_data[list(tweet_info_columns)].fillna('').sort_values(
                     tweet_info_columns[0]).to_html()
+                tweets_box.layout.margin = '5px'
                 tweets_box.placeholder = nuts_id
 
         nuts_id = shapes[nuts_ids_column].values[0]
@@ -161,6 +162,11 @@ def plot_geo_shapes_vis(data, nuts_shapes, date_range, nuts_ids_columns=('origin
         for layer_group, full_group in zip(layer_groups, full_groups):
             change_layers(layer_group, full_group)
 
+    def add_widget(widget, pos, margin='0px 0px 0px 0px'):
+        widget.layout.margin = margin
+        widget_control = ipyleaflet.WidgetControl(widget=widget, position=pos)
+        m.add_control(widget_control)
+
     data = date_filter(data, date_range).dropna(subset=nuts_ids_columns, how='all')
     full_data = data.copy()
     full_groups = []
@@ -168,41 +174,34 @@ def plot_geo_shapes_vis(data, nuts_shapes, date_range, nuts_ids_columns=('origin
     m.layout.height = '800px'
 
     merged_dfs = [merge_df(data=data, nuts_shapes=nuts_shapes, nuts_ids_column=nuts_ids_column,
-                           color_column=color_column, level=level) for nuts_ids_column in nuts_ids_columns]
+                           color_column=color_column, level='all') for nuts_ids_column in nuts_ids_columns]
     vmin, vmax = 1, np.max([df[color_column].max() for df in merged_dfs])
 
-    country_widget_html = widgets.HTML('''Hover over a Region<br>Click it to see tweets''')
-    country_widget_html.layout.margin = '0px 20px 20px 20px'
-    country_widget = ipyleaflet.WidgetControl(widget=country_widget_html, position='topright')
-    m.add_control(country_widget)
+    country_widget = widgets.HTML('''Hover over a Region<br>Click it to see tweets''')
+    add_widget(country_widget, pos='topright', margin='10px')
 
     cbar_widget_box = interactive_output(plot_cbar, dict(name=fixed(cmap), vmin=fixed(vmin), vmax=fixed(vmax),
                                                          logarithmic=fixed(logarithmic)))
-    cbar_widget = ipyleaflet.WidgetControl(widget=cbar_widget_box, position='bottomright')
-    m.add_control(cbar_widget)
+    add_widget(cbar_widget_box, pos='bottomright')
 
     time_hist = widgets.HBox([])
-    time_hist_widget = ipyleaflet.WidgetControl(widget=time_hist, position='bottomleft')
-    m.add_control(time_hist_widget)
+    add_widget(time_hist, pos='bottomleft')
 
     tweets_table = widgets.HTML(layout=widgets.Layout(overflow='scroll_hidden'))
     tweets_box = widgets.HBox([tweets_table], layout=Layout(max_height='400px', overflow_y='auto'))
-    tweets_box_widget = ipyleaflet.WidgetControl(widget=tweets_box, position='bottomleft')
-    m.add_control(tweets_box_widget)
+    add_widget(tweets_box, pos='bottomleft')
 
     level_selector = widgets.Dropdown(options=['all', *sorted(nuts_shapes['LEVL_CODE'].unique())],
-                                      description='NUTS levels')
-
+                                      description='NUTS levels', layout=Layout(max_width='150px'))
     level_selector.observe(handler=show_level_layers, type='change', names=('value',))
-    level_widget = ipyleaflet.WidgetControl(widget=level_selector, position='topleft')
-    m.add_control(level_widget)
+    add_widget(level_selector, pos='topleft', margin='5px')
 
     m.add_control(ipyleaflet.LayersControl())
     m.add_control(ipyleaflet.FullScreenControl())
 
     for merged_df, nuts_ids_column in zip(merged_dfs, nuts_ids_columns):
         layer = get_shapes_heatmap(data=merged_df, nuts_ids_column=nuts_ids_column, color_column=color_column,
-                                   logarithmic=logarithmic, cmap=cmap, info_widget_html=country_widget_html, vmin=vmin,
+                                   logarithmic=logarithmic, cmap=cmap, info_widget_html=country_widget, vmin=vmin,
                                    vmax=vmax, full_data=full_data, time_hist=time_hist, date_limits=date_range,
                                    tweets_box=tweets_table)
         m.add_layer(layer)
