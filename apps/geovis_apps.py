@@ -224,15 +224,6 @@ def plot_geo_shapes_vis(data, nuts_shapes, nuts_ids_columns=('origin', 'destinat
         widget_control = ipyleaflet.WidgetControl(widget=widget, position=pos)
         m.add_control(widget_control)
 
-    def loading_wrapper(function):
-        def loading_func(*args, **kwargs):
-            prev_layout = info_widget.layout
-            info_widget.value, info_widget.layout = '<b>loading...</b>', Layout(margin='5px 15px 5px 15px')
-            function(*args, **kwargs)
-            info_widget.value, info_widget.layout = info_widget_default_text, prev_layout
-
-        return loading_func
-
     def on_zoom(change, max_level=3, min_level=0, offset=-5):
         if m.zoom != app_state['zoom']:
             app_state['zoom'] = m.zoom
@@ -249,6 +240,8 @@ def plot_geo_shapes_vis(data, nuts_shapes, nuts_ids_columns=('origin', 'destinat
     info_widget_default_text = 'Hover over a Region<br>Click it to see tweets'
     info_widget = widgets.HTML(info_widget_default_text)
     add_widget(info_widget, pos='topright', margin='0px 5px 0px 5px')
+
+    loading_wrapper = _loading_wrapper_factory(info_widget, info_widget_default_text)
 
     time_hist = widgets.HBox([])
     add_widget(time_hist, pos='bottomleft')
@@ -314,6 +307,19 @@ def _to_html(val):
                 disp = '<img src="{}" width="250px" style="padding:3px">'.format(val, val)
             return '<a href={} target="_blank">{}</a>'.format(val, disp)
     return str(val)
+
+
+def _loading_wrapper_factory(info_box, info_box_default_value=''):
+    def loading_wrapper(function):
+        def loading_func(*args, **kwargs):
+            prev_layout = info_box.layout
+            info_box.value, info_box.layout = '<b>loading...</b>', Layout(margin='5px 15px 5px 15px')
+            function(*args, **kwargs)
+            info_box.value, info_box.layout = info_box_default_value, prev_layout
+
+        return loading_func
+
+    return loading_wrapper
 
 
 def get_marker_cluster(data, geom_column, info_box: widgets.HTML, timestamp_column, title_columns=()):
@@ -386,8 +392,11 @@ def plot_geo_data_cluster(data, geom_column, title_columns):
     app_state = dict(is_in_bounds=None, full_data=data.dropna(subset=[geom_column]),
                      filtered_data=data.dropna(subset=[geom_column]), timestamp_column=_get_timestap_column(data))
 
-    info_box = widgets.HTML('Hover over a marker', layout=Layout(margin='10px'))
+    info_box_default_text = 'Hover over a marker'
+    info_box = widgets.HTML(info_box_default_text, layout=Layout(margin='10px'))
     m.add_control(ipyleaflet.WidgetControl(widget=info_box, position='topright'))
+
+    loading_wrapper = _loading_wrapper_factory(info_box, info_box_default_text)
 
     tweets_table = widgets.HTML(layout=widgets.Layout(overflow='scroll_hidden'))
     tweets_table_box = widgets.HBox([tweets_table],
@@ -398,7 +407,7 @@ def plot_geo_data_cluster(data, geom_column, title_columns):
     m.add_control(ipyleaflet.WidgetControl(widget=tweets_box, position='bottomleft'))
 
     time_slider = get_time_slider(app_state['full_data'])
-    time_slider.observe(change_date_range, type='change', names=('value',))
+    time_slider.observe(loading_wrapper(change_date_range), type='change', names=('value',))
     time_slider.layout.margin = '0px 5px 0px 5px'
     m.add_control(ipyleaflet.WidgetControl(widget=time_slider, position='topleft'))
 
