@@ -377,7 +377,7 @@ def plot_geo_data_cluster(data, geom_column, title_columns):
 
     def change_date_range(change):
         def filter_markers(marker_cluster: ipyleaflet.MarkerCluster, min_date, max_date):
-            marker_cluster.markers = [m for m in marker_cluster.markers if min_date <= m.timestamp.date() <= max_date]
+            marker_cluster.markers = [m for m in app_state['markers'] if min_date <= m.timestamp.date() <= max_date]
 
         filtered_data = date_filter(app_state['full_data'], change['new'],
                                     timestamp_column=app_state['timestamp_column'])
@@ -413,6 +413,7 @@ def plot_geo_data_cluster(data, geom_column, title_columns):
 
     marker_clusters = get_marker_cluster(app_state['filtered_data'], geom_column, title_columns=title_columns,
                                          info_box=info_box, timestamp_column=app_state['timestamp_column'])
+    app_state['markers'] = marker_clusters.markers
 
     heatmap_locations = list(app_state['filtered_data'][geom_column].apply(_wkb_hex_to_point).values)
     heatmap = ipyleaflet.Heatmap(name='Heatmap', min_opacity=.1, blur=20, radius=20, max_zoom=12,
