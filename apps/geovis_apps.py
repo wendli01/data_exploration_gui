@@ -332,10 +332,10 @@ def get_marker_cluster(data, geom_column, info_box: widgets.HTML, title_columns=
     return clusters
 
 
-def plot_geo_data_cluster(data, geom_column, timestamp_column, date_range, title_columns):
-    def date_filter(data, date_range):
-        dates = pd.to_datetime(data[timestamp_column]).apply(pd.Timestamp.date)
-        return data[(date_range[0] <= dates) & (dates <= date_range[1])]
+def plot_geo_data_cluster(data, geom_column, timestamp_column, title_columns):
+    def date_filter(df, date_range):
+        dates = pd.to_datetime(df[timestamp_column]).apply(pd.Timestamp.date)
+        return df[(date_range[0] <= dates) & (dates <= date_range[1])]
 
     def toggle_tweets_table_visibility(change):
         app_state['is_in_bounds'] = None
@@ -352,22 +352,35 @@ def plot_geo_data_cluster(data, geom_column, timestamp_column, date_range, title
             return
 
         bounds = np.array(m.bounds)
-        locs = data[geom_column].apply(_wkb_hex_to_point)
+        locs = app_state['filtered_data'][geom_column].apply(_wkb_hex_to_point)
         is_in_bounds = locs.apply(in_bounds)
         if tweets_table_cb.value and (
                 app_state['is_in_bounds'] is None or not np.array_equal(is_in_bounds, app_state['is_in_bounds'])):
             if is_in_bounds.sum() > 0:
-                tweets_table.value = data.loc[is_in_bounds, title_columns].reset_index(drop=True).to_html(
-                    formatters={'media': _to_html}, escape=False, na_rep='', index=False)
+                tweets_table.value = app_state['filtered_data'].loc[is_in_bounds, title_columns].reset_index(
+                    drop=True).to_html(formatters={'media': _to_html}, escape=False, na_rep='', index=False)
             else:
                 tweets_table.value = ''
         tweets_table_cb.description = 'Show {} Tweets'.format(is_in_bounds.sum())
         app_state['is_in_bounds'] = is_in_bounds
 
-    data = date_filter(data, date_range).dropna(subset=[geom_column])
-    m = ipyleaflet.Map(center=(51, 10), zoom=4, scroll_wheel_zoom=True)
+    def change_date_range(change):
+        filtered_data = date_filter(app_state['full_data'], change['new'])
+        app_state['filtered_data'] = filtered_data
+        heatmap = ipyleaflet.Heatmap(locations=list(filtered_data[geom_column].apply(_wkb_hex_to_point).values),
+                                     name='Heatmap',
+                                     min_opacity=.1, blur=20, radius=20, max_zoom=12)
+        marker_clusters = get_marker_cluster(filtered_data, geom_column, title_columns=title_columns, info_box=info_box)
+        for layer in m.layers:
+            if type(layer) not in (ipyleaflet.TileLayer, ipyleaflet.LocalTileLayer):
+                m.remove_layer(layer)
+        m.add_layer(marker_clusters)
+        m.add_layer(heatmap)
+
+    m = ipyleaflet.Map(center=(51, 10), zoom=4, scroll_wheel_zoom=True, zoom_control=False)
     m.layout.height = '900px'
-    app_state = dict(is_in_bounds=None)
+    app_state = dict(is_in_bounds=None, full_data=data.dropna(subset=[geom_column]),
+                     filtered_data=data.dropna(subset=[geom_column]))
 
     info_box = widgets.HTML('Hover over a marker', layout=Layout(margin='10px'))
     m.add_control(ipyleaflet.WidgetControl(widget=info_box, position='topright'))
@@ -376,37 +389,33 @@ def plot_geo_data_cluster(data, geom_column, timestamp_column, date_range, title
     tweets_table_box = widgets.HBox([tweets_table],
                                     layout=Layout(max_height='500px', overflow_y='auto', max_width='900px'))
     tweets_table_cb = widgets.Checkbox(value=False)
-    tweets_table_cb.observe(toggle_tweets_table_visibility
-                            , type='change', names=('value',))
+    tweets_table_cb.observe(toggle_tweets_table_visibility, type='change', names=('value',))
     tweets_box = widgets.VBox([tweets_table_cb, tweets_table_box])
     m.add_control(ipyleaflet.WidgetControl(widget=tweets_box, position='bottomleft'))
 
-    marker_clusters = get_marker_cluster(data, geom_column, title_columns=title_columns, info_box=info_box)
-    m.add_layer(marker_clusters)
+    time_slider = get_time_slider(app_state['full_data'])
+    time_slider.observe(change_date_range, type='change', names=('value',))
+    time_slider.layout.margin = '0px 5px 0px 5px'
+    m.add_control(ipyleaflet.WidgetControl(widget=time_slider, position='topleft'))
 
-    heatmap = ipyleaflet.Heatmap(locations=list(data[geom_column].apply(_wkb_hex_to_point).values), name='Heatmap',
-                                 min_opacity=.1, blur=20, radius=20, max_zoom=12)
-
-    m.add_layer(heatmap)
-    m.add_control(ipyleaflet.FullScreenControl())
+    change_date_range(dict(new=time_slider.value))
     m.add_control(ipyleaflet.LayersControl())
+    m.add_control(ipyleaflet.FullScreenControl())
     m.observe(show_tweets_table)
     display(m)
 
 
 def geo_vis_cluster_app(data, timestamp_column='_timestamp', geom_column='geom_tweet'):
-    time_slider = get_time_slider(data)
     title_columns = widgets.SelectMultiple(options=sorted(data.columns), description='Information to show',
                                            value=('text', 'text_translated', '_timestamp', 'media'))
     title_columns_tip = widgets.HTML('Select multiple by dragging or ctrl + click <br> Deselect with ctrl + click')
     title_columns_controls = widgets.HBox([title_columns, title_columns_tip])
 
     geo_vis = interactive_output(plot_geo_data_cluster,
-                                 dict(data=fixed(data), date_range=time_slider, geom_column=fixed(geom_column),
+                                 dict(data=fixed(data), geom_column=fixed(geom_column),
                                       timestamp_column=fixed(timestamp_column), title_columns=title_columns))
 
     geo_vis.layout.width = '90%'
-    controls = widgets.Tab([time_slider, title_columns_controls])
-    controls.set_title(0, 'Date Range')
-    controls.set_title(1, 'Information to Show')
+    controls = widgets.Tab([title_columns_controls])
+    controls.set_title(0, 'Information to Show')
     display(controls, geo_vis)
