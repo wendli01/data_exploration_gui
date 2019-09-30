@@ -50,7 +50,6 @@ def get_shapes_heatmap(data, nuts_ids_column, color_column, logarithmic: bool = 
             out = interactive_output(plot_time_hist,
                                      dict(data=fixed(relevant_data), timestamp_column=fixed('_timestamp'),
                                           value_column=fixed(color_column), xlims=fixed(date_limits)))
-            time_hist.layout.margin = '5px'
             time_hist.children = [out]
 
         def click_event_handler(**kwargs):
@@ -132,6 +131,7 @@ def plot_time_hist(data, timestamp_column, value_column, xlims):
     dates = pd.to_datetime(df[timestamp_column]).apply(pd.Timestamp.date)
     time_hist = df.groupby(dates).sum()[value_column].reset_index()
     time_hist['zero'] = 0
+    plt.figure(figsize=(5, 3))
     plt.box(False), plt.xlim(*xlims)
     if len(time_hist) > 1:
         plot = plt.plot(time_hist[timestamp_column], time_hist[value_column], label=value_column, marker='o')
@@ -245,10 +245,10 @@ def plot_geo_shapes_vis(data, nuts_shapes, nuts_ids_columns=('origin', 'destinat
     app_state = dict(zoom=4, data=data.dropna(subset=nuts_ids_columns, how='all'), cmap='viridis', logarithmic=False,
                      vmin=1, vmax=1, full_data=data.copy(), level='all')
     m = ipyleaflet.Map(center=(51, 10), zoom=app_state['zoom'], scroll_wheel_zoom=True, zoom_control=False)
-    m.layout.height = '800px'
+    m.layout.height = '900px'
 
     country_widget = widgets.HTML('''Hover over a Region<br>Click it to see tweets''')
-    add_widget(country_widget, pos='topright', margin='10px')
+    add_widget(country_widget, pos='topright', margin='0px 5px 0px 5px')
 
     time_hist = widgets.HBox([])
     add_widget(time_hist, pos='bottomleft')
@@ -259,7 +259,7 @@ def plot_geo_shapes_vis(data, nuts_shapes, nuts_ids_columns=('origin', 'destinat
 
     time_slider = get_time_slider(app_state['data'])
     time_slider.observe(loading_wrapper(change_date_range), type='change', names=('value',))
-    add_widget(time_slider, 'topleft', margin='5px')
+    add_widget(time_slider, 'topleft', margin='0px 5px 0px 5px')
 
     level_selector = widgets.Dropdown(options=['all', *sorted(nuts_shapes['LEVL_CODE'].unique())],
                                       description='NUTS levels', layout=Layout(max_width='180px'))
@@ -273,7 +273,7 @@ def plot_geo_shapes_vis(data, nuts_shapes, nuts_ids_columns=('origin', 'destinat
     cmap_control = widgets.VBox([cmap_selector, logarithmic_cbox])
     cmap_selector.observe(handler=loading_wrapper(change_colormap_name), type='change', names=('value',))
     logarithmic_cbox.observe(handler=loading_wrapper(change_colormap_log), type='change', names=('value',))
-    add_widget(widgets.HBox([level_control, cmap_control]), pos='topleft', margin='5px')
+    add_widget(widgets.HBox([level_control, cmap_control]), pos='topleft', margin='5px 5px 0px 5px')
 
     cbar_widget = widgets.HBox([interactive_output(plot_cbar, dict(name=cmap_selector, logarithmic=logarithmic_cbox))])
     add_widget(cbar_widget, pos='bottomright')
@@ -366,7 +366,7 @@ def plot_geo_data_cluster(data, geom_column, timestamp_column, date_range, title
 
     data = date_filter(data, date_range).dropna(subset=[geom_column])
     m = ipyleaflet.Map(center=(51, 10), zoom=4, scroll_wheel_zoom=True)
-    m.layout.height = '800px'
+    m.layout.height = '900px'
     app_state = dict(is_in_bounds=None)
 
     info_box = widgets.HTML('Hover over a marker', layout=Layout(margin='10px'))
