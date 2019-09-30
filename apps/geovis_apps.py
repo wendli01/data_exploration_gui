@@ -171,7 +171,7 @@ def plot_geo_shapes_vis(data, nuts_shapes, nuts_ids_columns=('origin', 'destinat
             table_columns = ['_timestamp', 'text_translated', 'num_persons', 'mode',
                              *[col for col in nuts_ids_columns if col != nuts_ids_column]]
             layer = get_shapes_heatmap(data=merged_df, nuts_ids_column=nuts_ids_column, color_column=color_column,
-                                       info_widget_html=country_widget, vmin=app_state['vmin'], vmax=app_state['vmax'],
+                                       info_widget_html=info_widget, vmin=app_state['vmin'], vmax=app_state['vmax'],
                                        full_data=app_state['full_data'], time_hist=time_hist, date_limits=change['new'],
                                        tweets_table=tweets_table, cmap=app_state['cmap'], table_columns=table_columns,
                                        logarithmic=app_state['logarithmic'])
@@ -226,11 +226,10 @@ def plot_geo_shapes_vis(data, nuts_shapes, nuts_ids_columns=('origin', 'destinat
 
     def loading_wrapper(function):
         def loading_func(*args, **kwargs):
-            loading = ipyleaflet.WidgetControl(widget=widgets.HTML('loading...', layout=Layout(margin='10px')),
-                                               position='bottomright')
-            m.add_control(loading)
+            prev_layout = info_widget.layout
+            info_widget.value, info_widget.layout = '<b>loading...</b>', Layout(margin='5px 15px 5px 15px')
             function(*args, **kwargs)
-            m.remove_control(loading)
+            info_widget.value, info_widget.layout = info_widget_default_text, prev_layout
 
         return loading_func
 
@@ -247,8 +246,9 @@ def plot_geo_shapes_vis(data, nuts_shapes, nuts_ids_columns=('origin', 'destinat
     m = ipyleaflet.Map(center=(51, 10), zoom=app_state['zoom'], scroll_wheel_zoom=True, zoom_control=False)
     m.layout.height = '900px'
 
-    country_widget = widgets.HTML('''Hover over a Region<br>Click it to see tweets''')
-    add_widget(country_widget, pos='topright', margin='0px 5px 0px 5px')
+    info_widget_default_text = 'Hover over a Region<br>Click it to see tweets'
+    info_widget = widgets.HTML(info_widget_default_text)
+    add_widget(info_widget, pos='topright', margin='0px 5px 0px 5px')
 
     time_hist = widgets.HBox([])
     add_widget(time_hist, pos='bottomleft')
