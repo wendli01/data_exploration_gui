@@ -47,7 +47,7 @@ def get_shapes_heatmap(data, nuts_ids_column, color_column, logarithmic: bool = 
 
         def hover_event_handler(**kwargs):
             info_widget_html.value = get_info_text()
-            out = interactive_output(plot_time_hist,
+            out = interactive_output(_plot_time_hist_values,
                                      dict(data=fixed(relevant_data), timestamp_column=fixed('_timestamp'),
                                           value_column=fixed(color_column), xlims=fixed(date_limits)))
             time_hist.children = [out]
@@ -124,7 +124,7 @@ def merge_df(data, nuts_shapes, nuts_ids_column, color_column, level='all'):
     return merged_df.dropna(subset=['NUTS_ID', color_column])
 
 
-def plot_time_hist(data, timestamp_column, value_column, xlims):
+def _plot_time_hist_values(data, timestamp_column, value_column, xlims):
     df = data.dropna(subset=[value_column, timestamp_column])
     if len(df) == 0:
         return
@@ -343,6 +343,16 @@ def get_marker_cluster(data, geom_column, info_box: widgets.HTML, timestamp_colu
     return clusters
 
 
+def _plot_time_hist_counts(data, timestamp_column):
+    plt.figure(figsize=(6.8, .7))
+    dates = pd.to_datetime(data[timestamp_column]).apply(pd.Timestamp.date)
+    counts = data.groupby(dates)[timestamp_column].count()
+    plot = plt.plot(counts)
+    plt.box(False), plt.axis('off')
+    plt.fill_between(counts.index, counts, counts * 0, alpha=.5)
+    return plot
+
+
 def plot_geo_data_cluster(data, geom_column, title_columns):
     def date_filter(df, date_range, timestamp_column: str):
         dates = pd.to_datetime(df[timestamp_column]).apply(pd.Timestamp.date)
@@ -408,8 +418,12 @@ def plot_geo_data_cluster(data, geom_column, title_columns):
 
     time_slider = get_time_slider(app_state['full_data'])
     time_slider.observe(loading_wrapper(change_date_range), type='change', names=('value',))
-    time_slider.layout.margin = '0px 5px 0px 5px'
-    m.add_control(ipyleaflet.WidgetControl(widget=time_slider, position='topleft'))
+    time_slider.layout.margin, time_slider.description = '0px 5px 0px 5px', ''
+    ts_plot = interactive_output(_plot_time_hist_counts,
+                                 dict(data=fixed(data), timestamp_column=fixed(app_state['timestamp_column'])))
+    ts_plot.layout.margin = '0px 0px -15px -17px'
+    time_slider_box = widgets.VBox([ts_plot, time_slider])
+    m.add_control(ipyleaflet.WidgetControl(widget=time_slider_box, position='topleft'))
 
     marker_clusters = get_marker_cluster(app_state['filtered_data'], geom_column, title_columns=title_columns,
                                          info_box=info_box, timestamp_column=app_state['timestamp_column'])
@@ -425,6 +439,7 @@ def plot_geo_data_cluster(data, geom_column, title_columns):
     m.add_control(ipyleaflet.LayersControl())
     m.add_control(ipyleaflet.FullScreenControl())
     m.observe(show_tweets_table)
+
     display(m)
 
 
