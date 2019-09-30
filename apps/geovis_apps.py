@@ -343,14 +343,26 @@ def get_marker_cluster(data, geom_column, info_box: widgets.HTML, timestamp_colu
     return clusters
 
 
-def _plot_time_hist_counts(data, timestamp_column):
+def _plot_time_hist_counts(full_data, filtered_data, timestamp_column):
+    def plot_counts(df, color):
+        dates = pd.to_datetime(df[timestamp_column]).apply(pd.Timestamp.date)
+        counts = df.groupby(dates)[timestamp_column].count()
+        plot = plt.plot(counts, c=color, alpha=.7)
+        plt.fill_between(counts.index, counts, counts * 0, alpha=.4, color=color)
+        return plot
+
     plt.figure(figsize=(6.8, .7))
-    dates = pd.to_datetime(data[timestamp_column]).apply(pd.Timestamp.date)
-    counts = data.groupby(dates)[timestamp_column].count()
-    plot = plt.plot(counts)
     plt.box(False), plt.axis('off')
-    plt.fill_between(counts.index, counts, counts * 0, alpha=.5)
-    return plot
+    plot_counts(full_data, '#1f77b4')
+    return plot_counts(filtered_data, '#d62728')
+
+
+def _get_ts_count_plot(full_data, filtered_data, timestamp_column):
+    ts_plot = interactive_output(_plot_time_hist_counts,
+                                 dict(full_data=fixed(full_data), filtered_data=fixed(filtered_data),
+                                      timestamp_column=fixed(timestamp_column)))
+    ts_plot.layout.margin = '-10px 0px -15px -17px'
+    return ts_plot
 
 
 def plot_geo_data_cluster(data, geom_column, title_columns):
@@ -363,9 +375,9 @@ def plot_geo_data_cluster(data, geom_column, title_columns):
         if change['old'] and not change['new']:
             tweets_table.value, app_state['is_in_bounds'] = '', None
         else:
-            show_tweets_table()
+            update_range()
 
-    def show_tweets_table(*_):
+    def update_range(*_):
         def in_bounds(loc):
             return all(bounds[0] < loc) and all(loc < bounds[1])
 
@@ -375,13 +387,18 @@ def plot_geo_data_cluster(data, geom_column, title_columns):
         bounds = np.array(m.bounds)
         locs = app_state['filtered_data'][geom_column].apply(_wkb_hex_to_point)
         is_in_bounds = locs.apply(in_bounds)
-        if tweets_table_cb.value and (
-                app_state['is_in_bounds'] is None or not np.array_equal(is_in_bounds, app_state['is_in_bounds'])):
+        if app_state['is_in_bounds'] is None or not np.array_equal(is_in_bounds, app_state['is_in_bounds']):
             if is_in_bounds.sum() > 0:
-                tweets_table.value = app_state['filtered_data'].loc[is_in_bounds, title_columns].reset_index(
-                    drop=True).to_html(formatters={'media': _to_html}, escape=False, na_rep='', index=False)
+                ts_plot = _get_ts_count_plot(app_state['full_data'], app_state['filtered_data'][is_in_bounds],
+                                             app_state['timestamp_column'])
+                time_slider_box.children = [ts_plot, *time_slider_box.children[1:]]
+
+                if tweets_table_cb.value:
+                    tweets_table.value = app_state['filtered_data'].loc[is_in_bounds, title_columns].reset_index(
+                        drop=True).to_html(formatters={'media': _to_html}, escape=False, na_rep='', index=False)
             else:
                 tweets_table.value = ''
+
         tweets_table_cb.description = 'Show {} Tweets'.format(is_in_bounds.sum())
         app_state['is_in_bounds'] = is_in_bounds
 
@@ -394,7 +411,7 @@ def plot_geo_data_cluster(data, geom_column, title_columns):
         app_state['filtered_data'] = filtered_data
         heatmap.locations = list(filtered_data[geom_column].apply(_wkb_hex_to_point).values)
         filter_markers(marker_clusters, *change['new'])
-        show_tweets_table()
+        update_range()
 
     m = ipyleaflet.Map(center=(51, 10), zoom=4, scroll_wheel_zoom=True, zoom_control=False)
     m.layout.height = '900px'
@@ -419,9 +436,7 @@ def plot_geo_data_cluster(data, geom_column, title_columns):
     time_slider = get_time_slider(app_state['full_data'])
     time_slider.observe(loading_wrapper(change_date_range), type='change', names=('value',))
     time_slider.layout.margin, time_slider.description = '0px 5px 0px 5px', ''
-    ts_plot = interactive_output(_plot_time_hist_counts,
-                                 dict(data=fixed(data), timestamp_column=fixed(app_state['timestamp_column'])))
-    ts_plot.layout.margin = '0px 0px -15px -17px'
+    ts_plot = _get_ts_count_plot(data, app_state['filtered_data'], app_state['timestamp_column'])
     time_slider_box = widgets.VBox([ts_plot, time_slider])
     m.add_control(ipyleaflet.WidgetControl(widget=time_slider_box, position='topleft'))
 
@@ -438,7 +453,7 @@ def plot_geo_data_cluster(data, geom_column, title_columns):
     change_date_range(dict(new=time_slider.value))
     m.add_control(ipyleaflet.LayersControl())
     m.add_control(ipyleaflet.FullScreenControl())
-    m.observe(show_tweets_table)
+    m.observe(update_range)
 
     display(m)
 
