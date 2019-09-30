@@ -39,11 +39,11 @@ def get_nuts_shapes(shp_folder='nuts_data', simplify=False, tol=1e-3):
 def get_shapes_heatmap(data, nuts_ids_column, color_column, logarithmic: bool = False, cmap='viridis',
                        info_columns=('NUTS_ID', 'NUTS_NAME', 'num_persons'), info_widget_html=None,
                        vmin=0, vmax=1, time_hist=None, full_data=None, date_limits=None, tweets_table=None,
-                       tweet_info_columns=('_timestamp', 'text_translated', 'num_persons', 'mode')):
+                       table_columns=('_timestamp', 'text_translated', 'num_persons', 'mode')):
     def get_layer(shapes: gpd.GeoDataFrame, color):
         def get_info_text():
             return '<h4>{}</h4>'.format(nuts_ids_column) + '<br>'.join(
-                [str(shapes[col].values[0]) for col in info_columns])
+                [str(shapes[col].values[0]) for col in info_columns if col in shapes.columns])
 
         def hover_event_handler(**kwargs):
             info_widget_html.value = get_info_text()
@@ -59,9 +59,10 @@ def get_shapes_heatmap(data, nuts_ids_column, color_column, logarithmic: bool = 
             if tweets_table.placeholder == nuts_id:
                 tweets_table.placeholder, tweets_table.value = '', ''
             elif len(relevant_data) > 0:
-                header = '<b>{} {}</b>'.format(nuts_ids_column, shapes[info_columns[0]].values[0])
-                tweets_table.value = header + relevant_data[list(tweet_info_columns)].fillna('').sort_values(
-                    tweet_info_columns[0]).to_html()
+                header = '<b>{} {}</b>'.format(nuts_ids_column, nuts_id)
+                tweets_data = relevant_data[[c for c in table_columns if c in relevant_data.columns]].sort_values(
+                    table_columns[0]).dropna(axis='columns', how='all')
+                tweets_table.value = header + tweets_data.to_html(na_rep='', index=False)
                 tweets_table.layout.margin = '5px'
                 tweets_table.placeholder = nuts_id
 
@@ -167,10 +168,12 @@ def plot_geo_shapes_vis(data, nuts_shapes, nuts_ids_columns=('origin', 'destinat
 
         m.layers = [l for l in m.layers if type(l) != ipyleaflet.LayerGroup]
         for merged_df, nuts_ids_column in zip(merged_dfs, nuts_ids_columns):
+            table_columns = ['_timestamp', 'text_translated', 'num_persons', 'mode',
+                             *[col for col in nuts_ids_columns if col != nuts_ids_column]]
             layer = get_shapes_heatmap(data=merged_df, nuts_ids_column=nuts_ids_column, color_column=color_column,
                                        info_widget_html=country_widget, vmin=app_state['vmin'], vmax=app_state['vmax'],
                                        full_data=app_state['full_data'], time_hist=time_hist, date_limits=change['new'],
-                                       tweets_table=tweets_table, cmap=app_state['cmap'],
+                                       tweets_table=tweets_table, cmap=app_state['cmap'], table_columns=table_columns,
                                        logarithmic=app_state['logarithmic'])
             m.add_layer(layer)
 
@@ -251,7 +254,7 @@ def plot_geo_shapes_vis(data, nuts_shapes, nuts_ids_columns=('origin', 'destinat
     add_widget(time_hist, pos='bottomleft')
 
     tweets_table = widgets.HTML(layout=widgets.Layout(overflow='scroll_hidden'))
-    tweets_box = widgets.HBox([tweets_table], layout=Layout(max_height='400px', overflow_y='auto'))
+    tweets_box = widgets.HBox([tweets_table], layout=Layout(max_height='400px', overflow_y='auto', max_width='900px'))
     add_widget(tweets_box, pos='bottomleft')
 
     time_slider = get_time_slider(app_state['data'])
