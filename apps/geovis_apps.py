@@ -300,6 +300,10 @@ def _wkb_hex_to_point(s):
     return list(shapely.wkb.loads(s, hex=True).coords)[0][::-1]
 
 
+def _get_timestap_column(df):
+    return [c for c in df.columns if 'date' in c or 'timestamp' in c][0]
+
+
 def _to_html(val):
     if type(val) in (list, tuple, np.array):
         return ', '.join(list(map(_to_html, val)))
@@ -312,7 +316,7 @@ def _to_html(val):
     return str(val)
 
 
-def get_marker_cluster(data, geom_column, info_box: widgets.HTML, title_columns=()):
+def get_marker_cluster(data, geom_column, info_box: widgets.HTML, timestamp_column, title_columns=()):
     def get_title(d):
         return '<br>'.join([_to_html(d[c]) for c in title_columns if d[c] not in (np.nan, None)])
 
@@ -329,11 +333,12 @@ def get_marker_cluster(data, geom_column, info_box: widgets.HTML, title_columns=
     clusters = ipyleaflet.MarkerCluster(markers=markers, name='Marker Cluster')
     for marker, d in zip(clusters.markers, dicts):
         marker.on_mouseover(get_hover_event_handler(get_title(d)))
+        marker.timestamp = pd.to_datetime(d[timestamp_column])
     return clusters
 
 
-def plot_geo_data_cluster(data, geom_column, timestamp_column, title_columns):
-    def date_filter(df, date_range):
+def plot_geo_data_cluster(data, geom_column, title_columns):
+    def date_filter(df, date_range, timestamp_column: str):
         dates = pd.to_datetime(df[timestamp_column]).apply(pd.Timestamp.date)
         return df[(date_range[0] <= dates) & (dates <= date_range[1])]
 
@@ -365,22 +370,21 @@ def plot_geo_data_cluster(data, geom_column, timestamp_column, title_columns):
         app_state['is_in_bounds'] = is_in_bounds
 
     def change_date_range(change):
-        filtered_data = date_filter(app_state['full_data'], change['new'])
+        def filter_markers(marker_cluster: ipyleaflet.MarkerCluster, min_date, max_date):
+            marker_cluster.markers = [m for m in marker_cluster.markers if min_date <= m.timestamp.date() <= max_date]
+
+        filtered_data = date_filter(app_state['full_data'], change['new'],
+                                    timestamp_column=app_state['timestamp_column'])
         app_state['filtered_data'] = filtered_data
-        heatmap = ipyleaflet.Heatmap(locations=list(filtered_data[geom_column].apply(_wkb_hex_to_point).values),
-                                     name='Heatmap',
-                                     min_opacity=.1, blur=20, radius=20, max_zoom=12)
-        marker_clusters = get_marker_cluster(filtered_data, geom_column, title_columns=title_columns, info_box=info_box)
-        for layer in m.layers:
-            if type(layer) not in (ipyleaflet.TileLayer, ipyleaflet.LocalTileLayer):
-                m.remove_layer(layer)
-        m.add_layer(marker_clusters)
-        m.add_layer(heatmap)
+        heatmap.locations = list(filtered_data[geom_column].apply(_wkb_hex_to_point).values)
+        filter_markers(marker_clusters, *change['new'])
+        show_tweets_table()
 
     m = ipyleaflet.Map(center=(51, 10), zoom=4, scroll_wheel_zoom=True, zoom_control=False)
     m.layout.height = '900px'
+
     app_state = dict(is_in_bounds=None, full_data=data.dropna(subset=[geom_column]),
-                     filtered_data=data.dropna(subset=[geom_column]))
+                     filtered_data=data.dropna(subset=[geom_column]), timestamp_column=_get_timestap_column(data))
 
     info_box = widgets.HTML('Hover over a marker', layout=Layout(margin='10px'))
     m.add_control(ipyleaflet.WidgetControl(widget=info_box, position='topright'))
@@ -398,6 +402,15 @@ def plot_geo_data_cluster(data, geom_column, timestamp_column, title_columns):
     time_slider.layout.margin = '0px 5px 0px 5px'
     m.add_control(ipyleaflet.WidgetControl(widget=time_slider, position='topleft'))
 
+    marker_clusters = get_marker_cluster(app_state['filtered_data'], geom_column, title_columns=title_columns,
+                                         info_box=info_box, timestamp_column=app_state['timestamp_column'])
+
+    heatmap_locations = list(app_state['filtered_data'][geom_column].apply(_wkb_hex_to_point).values)
+    heatmap = ipyleaflet.Heatmap(name='Heatmap', min_opacity=.1, blur=20, radius=20, max_zoom=12,
+                                 locations=heatmap_locations)
+    m.add_layer(heatmap)
+    m.add_layer(marker_clusters)
+
     change_date_range(dict(new=time_slider.value))
     m.add_control(ipyleaflet.LayersControl())
     m.add_control(ipyleaflet.FullScreenControl())
@@ -405,15 +418,14 @@ def plot_geo_data_cluster(data, geom_column, timestamp_column, title_columns):
     display(m)
 
 
-def geo_vis_cluster_app(data, timestamp_column='_timestamp', geom_column='geom_tweet'):
+def geo_vis_cluster_app(data, geom_column='geom_tweet'):
     title_columns = widgets.SelectMultiple(options=sorted(data.columns), description='Information to show',
                                            value=('text', 'text_translated', '_timestamp', 'media'))
     title_columns_tip = widgets.HTML('Select multiple by dragging or ctrl + click <br> Deselect with ctrl + click')
     title_columns_controls = widgets.HBox([title_columns, title_columns_tip])
 
     geo_vis = interactive_output(plot_geo_data_cluster,
-                                 dict(data=fixed(data), geom_column=fixed(geom_column),
-                                      timestamp_column=fixed(timestamp_column), title_columns=title_columns))
+                                 dict(data=fixed(data), geom_column=fixed(geom_column), title_columns=title_columns))
 
     geo_vis.layout.width = '90%'
     controls = widgets.Tab([title_columns_controls])
