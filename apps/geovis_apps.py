@@ -420,8 +420,10 @@ def plot_geo_data_cluster(data, geom_column, title_columns):
                      filtered_data=data.dropna(subset=[geom_column]), timestamp_column=_get_timestap_column(data))
 
     info_box_default_text = 'Hover over a marker'
-    info_box = widgets.HTML(info_box_default_text, layout=Layout(margin='10px'))
-    m.add_control(ipyleaflet.WidgetControl(widget=info_box, position='topright'))
+    info_box = widgets.HTML(info_box_default_text,
+                            layout=Layout(margin='10px', overflow='scroll_hidden'))
+    m.add_control(ipyleaflet.WidgetControl(widget=widgets.HBox([info_box], layout=Layout(max_height='300px')),
+                                           position='topright'))
 
     loading_wrapper = _loading_wrapper_factory(info_box, info_box_default_text)
 
