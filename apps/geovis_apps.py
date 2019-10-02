@@ -72,7 +72,8 @@ def get_shapes_heatmap(data, nuts_ids_column, color_column, logarithmic: bool = 
         layer = ipyleaflet.GeoData(geo_dataframe=shapes, style=style, hover_style=hover_style)
         if full_data is None or tweets_table is None or time_hist is None:
             return layer
-        relevant_data = full_data[full_data[nuts_ids_column].str.startswith(nuts_id, na=False)].reset_index()
+        relevant_data = _date_filter(full_data[full_data[nuts_ids_column].str.startswith(nuts_id, na=False)],
+                                     date_limits).reset_index()
         if time_hist is not None and info_widget_html is not None:
             layer.on_hover(hover_event_handler)
         if tweets_table is not None:
@@ -102,8 +103,8 @@ def get_color(val: float, logarithmic: bool = False, cmap='viridis', vmin=0, vma
     return matplotlib.colors.to_hex(cm(norm(val + 1e-5)))
 
 
-def merge_df(data, nuts_shapes, nuts_ids_column, color_column, level='all'):
-    def aggregate_all(df, levels=(0, 1, 2, 3), **kwargs):
+def merge_df(data, nuts_shapes, nuts_ids_column, color_column, level='all', levels=(0, 1, 2, 3)):
+    def aggregate_all(df, **kwargs):
         return pd.concat([aggregate_nuts_level(df, level=level, **kwargs) for level in levels])
 
     def aggregate_nuts_level(df, level, nuts_ids_column='NUTS_ID', aggregatable_columns=('num_persons',),
@@ -114,11 +115,12 @@ def merge_df(data, nuts_shapes, nuts_ids_column, color_column, level='all'):
         return agg_df[agg_df[nuts_ids_column].apply(len) == level + 2]
 
     agg_data = data.dropna(subset=[color_column]).groupby(nuts_ids_column).sum().reset_index()
-    if level != 'all':
-        agg_data = aggregate_nuts_level(agg_data, level=level, aggregatable_columns=[color_column],
-                                        nuts_ids_column=nuts_ids_column)
-    else:
-        agg_data = aggregate_all(agg_data, aggregatable_columns=[color_column], nuts_ids_column=nuts_ids_column)
+    if len(levels) > 1:
+        if level != 'all':
+            agg_data = aggregate_nuts_level(agg_data, level=level, aggregatable_columns=[color_column],
+                                            nuts_ids_column=nuts_ids_column)
+        else:
+            agg_data = aggregate_all(agg_data, aggregatable_columns=[color_column], nuts_ids_column=nuts_ids_column)
 
     merged_df = pd.merge(agg_data, nuts_shapes, left_on=nuts_ids_column, right_on='NUTS_ID')
     return merged_df.dropna(subset=['NUTS_ID', color_column])
@@ -134,13 +136,19 @@ def _plot_time_hist_values(data, timestamp_column, value_column, xlims):
     plt.figure(figsize=(5, 3))
     plt.box(False), plt.xlim(*xlims)
     if len(time_hist) > 1:
-        plot = plt.plot(time_hist[timestamp_column], time_hist[value_column], label=value_column, marker='o')
+        plot = plt.plot(time_hist[timestamp_column], time_hist[value_column], label=value_column,
+                        marker='o' if len(time_hist) < 50 else '')
         plt.fill_between(time_hist[timestamp_column], time_hist[value_column], time_hist['zero'], alpha=.4)
     else:
         plot = plt.scatter(time_hist[timestamp_column], time_hist[value_column], label=value_column)
         plt.ylim(0, 1.05 * time_hist[value_column].max())
     plt.legend(), plt.xlabel(''), plt.xticks(rotation=45), plt.tight_layout()
     return plot
+
+
+def _date_filter(data, date_range, timestamp_column='_timestamp'):
+    dates = pd.to_datetime(data[timestamp_column]).apply(pd.Timestamp.date)
+    return data[(date_range[0] <= dates) & (dates <= date_range[1])]
 
 
 def plot_geo_shapes_vis(data, nuts_shapes, nuts_ids_columns=('origin', 'destination'),
@@ -154,15 +162,12 @@ def plot_geo_shapes_vis(data, nuts_shapes, nuts_ids_columns=('origin', 'destinat
         cbar = matplotlib.colorbar.ColorbarBase(ax, cmap=plt.get_cmap(name), norm=norm, orientation='vertical')
         return cbar
 
-    def date_filter(data, date_range):
-        dates = pd.to_datetime(data[timestamp_column]).apply(pd.Timestamp.date)
-        return data[(date_range[0] <= dates) & (dates <= date_range[1])]
-
     def change_date_range(change):
-        data = date_filter(app_state['data'], change['new']).dropna(subset=nuts_ids_columns, how='all')
+        data = _date_filter(app_state['data'], change['new'], timestamp_column=timestamp_column).dropna(
+            subset=nuts_ids_columns, how='all')
         merged_dfs = [merge_df(data=data, nuts_shapes=nuts_shapes, nuts_ids_column=nuts_ids_column,
-                               color_column=color_column, level=level_selector.value) for nuts_ids_column in
-                      nuts_ids_columns]
+                               color_column=color_column, level=level_selector.value, levels=app_state['nuts_levels'])
+                      for nuts_ids_column in nuts_ids_columns]
         app_state['vmax'] = np.max([df[color_column].max() for df in merged_dfs])
         interactive_output(plot_cbar, dict(name=cmap_selector, logarithmic=logarithmic_cbox))
 
@@ -224,16 +229,18 @@ def plot_geo_shapes_vis(data, nuts_shapes, nuts_ids_columns=('origin', 'destinat
         widget_control = ipyleaflet.WidgetControl(widget=widget, position=pos)
         m.add_control(widget_control)
 
-    def on_zoom(change, max_level=3, min_level=0, offset=-5):
+    def on_zoom(change, offset=-5):
         if m.zoom != app_state['zoom']:
             app_state['zoom'] = m.zoom
             if level_on_zoom.value:
+                min_level, max_level = np.min(app_state['nuts_levels']), np.max(app_state['nuts_levels'])
                 level = min(max_level, max(min_level, m.zoom + offset))
                 app_state['level'] = level
                 level_selector.value = level
 
     app_state = dict(zoom=4, data=data.dropna(subset=nuts_ids_columns, how='all'), cmap='viridis', logarithmic=False,
-                     vmin=1, vmax=1, full_data=data.copy(), level='all')
+                     vmin=1, vmax=1, full_data=data.copy(), level='all',
+                     nuts_levels=sorted(nuts_shapes['LEVL_CODE'].unique()))
     m = ipyleaflet.Map(center=(51, 10), zoom=app_state['zoom'], scroll_wheel_zoom=True, zoom_control=False)
     m.layout.height = '900px'
 
@@ -254,8 +261,8 @@ def plot_geo_shapes_vis(data, nuts_shapes, nuts_ids_columns=('origin', 'destinat
     time_slider.observe(loading_wrapper(change_date_range), type='change', names=('value',))
     add_widget(time_slider, 'topleft', margin='0px 5px 0px 5px')
 
-    level_selector = widgets.Dropdown(options=['all', *sorted(nuts_shapes['LEVL_CODE'].unique())],
-                                      description='NUTS levels', layout=Layout(max_width='180px'))
+    level_selector = widgets.Dropdown(options=['all', *app_state['nuts_levels']], description='NUTS levels',
+                                      layout=Layout(max_width='180px'))
     level_selector.observe(handler=loading_wrapper(change_level_layers), type='change', names=('value',))
     level_on_zoom = widgets.Checkbox(value=True, description='with zoom', layout=Layout(max_width='180px'))
     level_control = widgets.VBox([level_selector, level_on_zoom])
