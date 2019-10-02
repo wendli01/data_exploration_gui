@@ -151,8 +151,7 @@ def _date_filter(data, date_range, timestamp_column='_timestamp'):
     return data[(date_range[0] <= dates) & (dates <= date_range[1])]
 
 
-def plot_geo_shapes_vis(data, nuts_shapes, nuts_ids_columns=('origin', 'destination'),
-                        color_column='num_persons', timestamp_column='_timestamp'):
+def plot_geo_shapes_vis(data, nuts_shapes, nuts_ids_columns, color_column, timestamp_column):
     def plot_cbar(name, logarithmic=False):
         vmin, vmax = app_state['vmin'], app_state['vmax']
         if vmin == vmax or any(pd.isna([vmin, vmax])):
@@ -286,13 +285,16 @@ def plot_geo_shapes_vis(data, nuts_shapes, nuts_ids_columns=('origin', 'destinat
     display(m)
 
 
-def geo_vis_shapes_app(data, simplify_nuts_shapes=True):
-    nuts_ids_columns = ['origin', 'destination']
-    nuts_shapes = get_nuts_shapes(simplify=simplify_nuts_shapes, tol=1e-3)
+def geo_vis_shapes_app(data: pd.DataFrame, simplify_nuts_shapes=True, nuts_shapes: gpd.GeoDataFrame = None,
+                       nuts_ids_columns=('origin', 'destination'), timestamp_column='_timestamp',
+                       color_column='num_persons'):
+    if nuts_shapes is None:
+        nuts_shapes = get_nuts_shapes(simplify=simplify_nuts_shapes, tol=1e-3)
 
     geo_vis = interactive_output(plot_geo_shapes_vis,
-                                 dict(nuts_shapes=fixed(nuts_shapes), data=fixed(data),
-                                      nuts_ids_columns=fixed(nuts_ids_columns)))
+                                 dict(nuts_ids_columns=fixed(nuts_ids_columns), data=fixed(data),
+                                      timestamp_column=fixed(timestamp_column), nuts_shapes=fixed(nuts_shapes),
+                                      color_column=fixed(color_column)))
     display(geo_vis)
 
 
